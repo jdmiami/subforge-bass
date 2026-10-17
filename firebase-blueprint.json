@@ -1,0 +1,338 @@
+{
+  "entities": {
+    "UserInstrument": {
+      "title": "UserInstrument",
+      "description": "A user-created or customized AI bass drum pad instrument with 12-note modulation and visual animation settings.",
+      "type": "object",
+      "properties": {
+        "userId": {
+          "type": "string",
+          "description": "UID of the authenticated owner."
+        },
+        "name": {
+          "type": "string",
+          "description": "Display name of the bass instrument (1..80 chars)."
+        },
+        "category": {
+          "type": "string",
+          "description": "Bass category tag (1..40 chars)."
+        },
+        "description": {
+          "type": "string",
+          "description": "Tone description or prompt used to forge the bass (1..500 chars)."
+        },
+        "waveform": {
+          "type": "string",
+          "enum": ["SINE", "SAW", "SQUARE", "TRIANGLE", "SUB_PULSE", "FM_GROWL"],
+          "description": "Core oscillator synthesis waveform."
+        },
+        "baseFreqHz": {
+          "type": "number",
+          "description": "Root C1/C2 bass frequency in Hz (20..220) before 12-semitone pitch modulation."
+        },
+        "subOctaveMix": {
+          "type": "number",
+          "description": "Sub-octave (-12st sine) blend level (0.0..1.0)."
+        },
+        "cutoffHz": {
+          "type": "number",
+          "description": "Low-pass resonant filter cutoff frequency in Hz (40..8000)."
+        },
+        "resonance": {
+          "type": "number",
+          "description": "Filter resonance Q factor (0.0..1.0)."
+        },
+        "drive": {
+          "type": "number",
+          "description": "Harmonic saturation / distortion drive (0.0..1.0)."
+        },
+        "attackMs": {
+          "type": "integer",
+          "description": "Envelope attack time in milliseconds (1..1000)."
+        },
+        "decayMs": {
+          "type": "integer",
+          "description": "Envelope decay/release time in milliseconds (20..3000)."
+        },
+        "lfoRateHz": {
+          "type": "number",
+          "description": "Modulation LFO rate in Hz (0.0..30.0)."
+        },
+        "lfoDepth": {
+          "type": "number",
+          "description": "Modulation LFO depth applied to filter/pitch (0.0..1.0)."
+        },
+        "accentColorHex": {
+          "type": "string",
+          "description": "Hex color string for the 12 drum pads (4..12 chars)."
+        },
+        "animationStyle": {
+          "type": "string",
+          "enum": ["PLASMA_PULSE", "LASER_GRID", "NEON_RIPPLE", "PARTICLE_BURST", "WAVE_TUNNEL", "VORTEX_SPIN"],
+          "description": "Beat-synced visual animation style triggered on pad hit."
+        },
+        "padVisualPrompt": {
+          "type": "string",
+          "description": "Visual prompt describing the pad artwork and motion (0..400 chars)."
+        },
+        "padImageBase64": {
+          "type": "string",
+          "description": "Optional Base64-encoded generated artwork for the instrument pads."
+        },
+        "padVideoUri": {
+          "type": "string",
+          "description": "Optional URI or identifier for Veo animated pad visual."
+        },
+        "aiThinkingSummary": {
+          "type": "string",
+          "description": "Optional Gemini high-thinking acoustic synthesis breakdown."
+        },
+        "createdAt": {
+          "type": "string",
+          "format": "date-time",
+          "description": "Server timestamp when created (FieldValue.serverTimestamp())."
+        },
+        "updatedAt": {
+          "type": "string",
+          "format": "date-time",
+          "description": "Server timestamp when last updated (FieldValue.serverTimestamp())."
+        }
+      },
+      "required": [
+        "userId",
+        "name",
+        "category",
+        "description",
+        "waveform",
+        "baseFreqHz",
+        "subOctaveMix",
+        "cutoffHz",
+        "resonance",
+        "drive",
+        "attackMs",
+        "decayMs",
+        "lfoRateHz",
+        "lfoDepth",
+        "accentColorHex",
+        "animationStyle",
+        "padVisualPrompt",
+        "createdAt",
+        "updatedAt"
+      ]
+    },
+    "MidiPattern": {
+      "title": "MidiPattern",
+      "description": "A cloud-saved 16-step 12-note bass MIDI sequence with real-time synth automation and VST bridge routing.",
+      "type": "object",
+      "properties": {
+        "userId": {
+          "type": "string",
+          "description": "UID of the authenticated pattern owner."
+        },
+        "name": {
+          "type": "string",
+          "description": "Pattern title (1..80 chars)."
+        },
+        "instrumentId": {
+          "type": "string",
+          "description": "ID of the linked bass instrument (1..128 chars)."
+        },
+        "instrumentName": {
+          "type": "string",
+          "description": "Name of the linked bass instrument (1..80 chars)."
+        },
+        "bpm": {
+          "type": "integer",
+          "description": "Tempo in beats per minute (40..240)."
+        },
+        "swingPercent": {
+          "type": "integer",
+          "description": "Groove swing percentage (0..75)."
+        },
+        "stepsJson": {
+          "type": "string",
+          "description": "Serialized 16-step sequence with note index (0..11), velocity, gate, and filter mod (1..8000 chars)."
+        },
+        "vstSyncChannel": {
+          "type": "integer",
+          "description": "DAW VST plugin MIDI channel (1..16)."
+        },
+        "createdAt": {
+          "type": "string",
+          "format": "date-time",
+          "description": "Server timestamp when created (FieldValue.serverTimestamp())."
+        },
+        "updatedAt": {
+          "type": "string",
+          "format": "date-time",
+          "description": "Server timestamp when updated (FieldValue.serverTimestamp())."
+        }
+      },
+      "required": [
+        "userId",
+        "name",
+        "instrumentId",
+        "instrumentName",
+        "bpm",
+        "swingPercent",
+        "stepsJson",
+        "vstSyncChannel",
+        "createdAt",
+        "updatedAt"
+      ]
+    },
+    "SharedInstrument": {
+      "title": "SharedInstrument",
+      "description": "A community-published AI bass instrument with 12-note synthesis parameters, pad visuals, likes, and feedback.",
+      "type": "object",
+      "properties": {
+        "userId": {
+          "type": "string",
+          "description": "UID of the creator who shared the instrument."
+        },
+        "authorName": {
+          "type": "string",
+          "description": "Display name of the creator (1..80 chars)."
+        },
+        "visibility": {
+          "type": "string",
+          "enum": ["PUBLIC", "PRIVATE"],
+          "description": "Visibility scope required for secure list queries."
+        },
+        "name": {
+          "type": "string",
+          "description": "Instrument name (1..80 chars)."
+        },
+        "category": {
+          "type": "string",
+          "description": "Instrument category (1..40 chars)."
+        },
+        "description": {
+          "type": "string",
+          "description": "Sound design description (1..500 chars)."
+        },
+        "waveform": {
+          "type": "string",
+          "enum": ["SINE", "SAW", "SQUARE", "TRIANGLE", "SUB_PULSE", "FM_GROWL"],
+          "description": "Oscillator waveform."
+        },
+        "baseFreqHz": {
+          "type": "number",
+          "description": "Root bass frequency in Hz (20..220)."
+        },
+        "subOctaveMix": {
+          "type": "number",
+          "description": "Sub-octave blend (0.0..1.0)."
+        },
+        "cutoffHz": {
+          "type": "number",
+          "description": "Filter cutoff in Hz (40..8000)."
+        },
+        "resonance": {
+          "type": "number",
+          "description": "Filter resonance (0.0..1.0)."
+        },
+        "drive": {
+          "type": "number",
+          "description": "Distortion drive (0.0..1.0)."
+        },
+        "attackMs": {
+          "type": "integer",
+          "description": "Envelope attack in ms (1..1000)."
+        },
+        "decayMs": {
+          "type": "integer",
+          "description": "Envelope decay in ms (20..3000)."
+        },
+        "lfoRateHz": {
+          "type": "number",
+          "description": "LFO rate in Hz (0.0..30.0)."
+        },
+        "lfoDepth": {
+          "type": "number",
+          "description": "LFO depth (0.0..1.0)."
+        },
+        "accentColorHex": {
+          "type": "string",
+          "description": "Hex color for pads (4..12 chars)."
+        },
+        "animationStyle": {
+          "type": "string",
+          "enum": ["PLASMA_PULSE", "LASER_GRID", "NEON_RIPPLE", "PARTICLE_BURST", "WAVE_TUNNEL", "VORTEX_SPIN"],
+          "description": "Beat-synced pad visual animation style."
+        },
+        "padVisualPrompt": {
+          "type": "string",
+          "description": "Prompt used for pad visual generation (0..400 chars)."
+        },
+        "likesCount": {
+          "type": "integer",
+          "description": "Community upvote count (>= 0)."
+        },
+        "downloadsCount": {
+          "type": "integer",
+          "description": "Number of times imported by other musicians (>= 0)."
+        },
+        "lastFeedbackText": {
+          "type": "string",
+          "description": "Most recent community feedback comment (0..300 chars)."
+        },
+        "lastFeedbackAuthor": {
+          "type": "string",
+          "description": "Display name of the user who left the latest feedback (0..80 chars)."
+        },
+        "createdAt": {
+          "type": "string",
+          "format": "date-time",
+          "description": "Server timestamp when shared (FieldValue.serverTimestamp())."
+        },
+        "updatedAt": {
+          "type": "string",
+          "format": "date-time",
+          "description": "Server timestamp when updated (FieldValue.serverTimestamp())."
+        }
+      },
+      "required": [
+        "userId",
+        "authorName",
+        "visibility",
+        "name",
+        "category",
+        "description",
+        "waveform",
+        "baseFreqHz",
+        "subOctaveMix",
+        "cutoffHz",
+        "resonance",
+        "drive",
+        "attackMs",
+        "decayMs",
+        "lfoRateHz",
+        "lfoDepth",
+        "accentColorHex",
+        "animationStyle",
+        "padVisualPrompt",
+        "likesCount",
+        "downloadsCount",
+        "lastFeedbackText",
+        "lastFeedbackAuthor",
+        "createdAt",
+        "updatedAt"
+      ]
+    }
+  },
+  "firestore": {
+    "/users/{userId}/instruments/{instrumentId}": {
+      "schema": { "$ref": "#/entities/UserInstrument" },
+      "description": "Private collection of custom AI-forged and customized bass instruments owned by a specific user."
+    },
+    "/users/{userId}/midi_patterns/{patternId}": {
+      "schema": { "$ref": "#/entities/MidiPattern" },
+      "description": "Private collection of cloud-synced 16-step bass MIDI sequences and DAW VST patterns owned by a specific user."
+    },
+    "/shared_instruments/{sharedId}": {
+      "schema": { "$ref": "#/entities/SharedInstrument" },
+      "description": "Community showcase of shared bass instruments for collaboration, importing, and feedback."
+    }
+  }
+}

@@ -1,0 +1,6 @@
+{
+  "name": "SubForge Bass",
+  "description": "Low-latency AI bass drum pad studio with 12 original synth instruments, Gemini voice & high-thinking instrument forging, cloud MIDI sequencer, VST bridge, and community sharing.",
+  "requestFramePermissions": [],
+  "majorCapabilities": ["MAJOR_CAPABILITY_SERVER_SIDE_GEMINI_API"]
+}

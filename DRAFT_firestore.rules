@@ -1,0 +1,256 @@
+rules_version = '2';
+
+service cloud.firestore {
+  match /databases/{database}/documents {
+
+    // Global Default-Deny Safety Net (Pillar 1 / Phase 4.1)
+    match /{document=**} {
+      allow read, write: if false;
+    }
+
+    // --- Primitive Helpers ---
+    function isSignedIn() {
+      return request.auth != null;
+    }
+
+    function incoming() {
+      return request.resource.data;
+    }
+
+    function existing() {
+      return resource.data;
+    }
+
+    function isValidId(id) {
+      return id is string && id.size() >= 1 && id.size() <= 128 && id.matches('^[a-zA-Z0-9_\\-]+$');
+    }
+
+    function isNumberInRange(val, minVal, maxVal) {
+      return (val is int || val is float) && val >= minVal && val <= maxVal;
+    }
+
+    function isValidWaveform(w) {
+      return w is string && w.size() <= 20 && (
+        w == 'SINE' ||
+        w == 'SAW' ||
+        w == 'SQUARE' ||
+        w == 'TRIANGLE' ||
+        w == 'SUB_PULSE' ||
+        w == 'FM_GROWL'
+      );
+    }
+
+    function isValidAnimationStyle(a) {
+      return a is string && a.size() <= 24 && (
+        a == 'PLASMA_PULSE' ||
+        a == 'LASER_GRID' ||
+        a == 'NEON_RIPPLE' ||
+        a == 'PARTICLE_BURST' ||
+        a == 'WAVE_TUNNEL' ||
+        a == 'VORTEX_SPIN'
+      );
+    }
+
+    // --- Validation Blueprints (Pillar 2) ---
+    function isValidUserInstrument(data) {
+      return data.keys().hasAll([
+               'userId', 'name', 'category', 'description', 'waveform',
+               'baseFreqHz', 'subOctaveMix', 'cutoffHz', 'resonance', 'drive',
+               'attackMs', 'decayMs', 'lfoRateHz', 'lfoDepth',
+               'accentColorHex', 'animationStyle', 'padVisualPrompt',
+               'createdAt', 'updatedAt'
+             ]) &&
+             data.keys().hasOnly([
+               'userId', 'name', 'category', 'description', 'waveform',
+               'baseFreqHz', 'subOctaveMix', 'cutoffHz', 'resonance', 'drive',
+               'attackMs', 'decayMs', 'lfoRateHz', 'lfoDepth',
+               'accentColorHex', 'animationStyle', 'padVisualPrompt',
+               'padImageBase64', 'padVideoUri', 'aiThinkingSummary',
+               'createdAt', 'updatedAt'
+             ]) &&
+             data.userId is string && data.userId.size() >= 1 && data.userId.size() <= 128 &&
+             data.userId == request.auth.uid &&
+             data.name is string && data.name.size() >= 1 && data.name.size() <= 80 &&
+             data.category is string && data.category.size() >= 1 && data.category.size() <= 40 &&
+             data.description is string && data.description.size() >= 1 && data.description.size() <= 500 &&
+             isValidWaveform(data.waveform) &&
+             isNumberInRange(data.baseFreqHz, 20, 220) &&
+             isNumberInRange(data.subOctaveMix, 0, 1) &&
+             isNumberInRange(data.cutoffHz, 40, 8000) &&
+             isNumberInRange(data.resonance, 0, 1) &&
+             isNumberInRange(data.drive, 0, 1) &&
+             data.attackMs is int && data.attackMs >= 1 && data.attackMs <= 1000 &&
+             data.decayMs is int && data.decayMs >= 20 && data.decayMs <= 3000 &&
+             isNumberInRange(data.lfoRateHz, 0, 30) &&
+             isNumberInRange(data.lfoDepth, 0, 1) &&
+             data.accentColorHex is string && data.accentColorHex.size() >= 4 && data.accentColorHex.size() <= 12 &&
+             isValidAnimationStyle(data.animationStyle) &&
+             data.padVisualPrompt is string && data.padVisualPrompt.size() <= 400 &&
+             (!('padImageBase64' in data) || data.padImageBase64 == null || (data.padImageBase64 is string && data.padImageBase64.size() <= 350000)) &&
+             (!('padVideoUri' in data) || data.padVideoUri == null || (data.padVideoUri is string && data.padVideoUri.size() <= 500)) &&
+             (!('aiThinkingSummary' in data) || data.aiThinkingSummary == null || (data.aiThinkingSummary is string && data.aiThinkingSummary.size() <= 1000)) &&
+             data.createdAt is timestamp && data.createdAt <= request.time &&
+             data.updatedAt is timestamp && data.updatedAt <= request.time;
+    }
+
+    function isValidMidiPattern(data) {
+      return data.keys().hasAll([
+               'userId', 'name', 'instrumentId', 'instrumentName',
+               'bpm', 'swingPercent', 'stepsJson', 'vstSyncChannel',
+               'createdAt', 'updatedAt'
+             ]) &&
+             data.keys().hasOnly([
+               'userId', 'name', 'instrumentId', 'instrumentName',
+               'bpm', 'swingPercent', 'stepsJson', 'vstSyncChannel',
+               'createdAt', 'updatedAt'
+             ]) &&
+             data.userId is string && data.userId.size() >= 1 && data.userId.size() <= 128 &&
+             data.userId == request.auth.uid &&
+             data.name is string && data.name.size() >= 1 && data.name.size() <= 80 &&
+             data.instrumentId is string && data.instrumentId.size() >= 1 && data.instrumentId.size() <= 128 &&
+             data.instrumentName is string && data.instrumentName.size() >= 1 && data.instrumentName.size() <= 80 &&
+             data.bpm is int && data.bpm >= 40 && data.bpm <= 240 &&
+             data.swingPercent is int && data.swingPercent >= 0 && data.swingPercent <= 75 &&
+             data.stepsJson is string && data.stepsJson.size() >= 1 && data.stepsJson.size() <= 8000 &&
+             data.vstSyncChannel is int && data.vstSyncChannel >= 1 && data.vstSyncChannel <= 16 &&
+             data.createdAt is timestamp && data.createdAt <= request.time &&
+             data.updatedAt is timestamp && data.updatedAt <= request.time;
+    }
+
+    function isValidSharedInstrument(data) {
+      return data.keys().hasAll([
+               'userId', 'authorName', 'visibility', 'name', 'category',
+               'description', 'waveform', 'baseFreqHz', 'subOctaveMix',
+               'cutoffHz', 'resonance', 'drive', 'attackMs', 'decayMs',
+               'lfoRateHz', 'lfoDepth', 'accentColorHex', 'animationStyle',
+               'padVisualPrompt', 'likesCount', 'downloadsCount',
+               'lastFeedbackText', 'lastFeedbackAuthor', 'createdAt', 'updatedAt'
+             ]) &&
+             data.keys().hasOnly([
+               'userId', 'authorName', 'visibility', 'name', 'category',
+               'description', 'waveform', 'baseFreqHz', 'subOctaveMix',
+               'cutoffHz', 'resonance', 'drive', 'attackMs', 'decayMs',
+               'lfoRateHz', 'lfoDepth', 'accentColorHex', 'animationStyle',
+               'padVisualPrompt', 'likesCount', 'downloadsCount',
+               'lastFeedbackText', 'lastFeedbackAuthor', 'createdAt', 'updatedAt'
+             ]) &&
+             data.userId is string && data.userId.size() >= 1 && data.userId.size() <= 128 &&
+             data.authorName is string && data.authorName.size() >= 1 && data.authorName.size() <= 80 &&
+             data.visibility is string && data.visibility.size() <= 16 && (data.visibility == 'PUBLIC' || data.visibility == 'PRIVATE') &&
+             data.name is string && data.name.size() >= 1 && data.name.size() <= 80 &&
+             data.category is string && data.category.size() >= 1 && data.category.size() <= 40 &&
+             data.description is string && data.description.size() >= 1 && data.description.size() <= 500 &&
+             isValidWaveform(data.waveform) &&
+             isNumberInRange(data.baseFreqHz, 20, 220) &&
+             isNumberInRange(data.subOctaveMix, 0, 1) &&
+             isNumberInRange(data.cutoffHz, 40, 8000) &&
+             isNumberInRange(data.resonance, 0, 1) &&
+             isNumberInRange(data.drive, 0, 1) &&
+             data.attackMs is int && data.attackMs >= 1 && data.attackMs <= 1000 &&
+             data.decayMs is int && data.decayMs >= 20 && data.decayMs <= 3000 &&
+             isNumberInRange(data.lfoRateHz, 0, 30) &&
+             isNumberInRange(data.lfoDepth, 0, 1) &&
+             data.accentColorHex is string && data.accentColorHex.size() >= 4 && data.accentColorHex.size() <= 12 &&
+             isValidAnimationStyle(data.animationStyle) &&
+             data.padVisualPrompt is string && data.padVisualPrompt.size() <= 400 &&
+             data.likesCount is int && data.likesCount >= 0 && data.likesCount <= 1000000 &&
+             data.downloadsCount is int && data.downloadsCount >= 0 && data.downloadsCount <= 1000000 &&
+             data.lastFeedbackText is string && data.lastFeedbackText.size() <= 300 &&
+             data.lastFeedbackAuthor is string && data.lastFeedbackAuthor.size() <= 80 &&
+             data.createdAt is timestamp && data.createdAt <= request.time &&
+             data.updatedAt is timestamp && data.updatedAt <= request.time;
+    }
+
+    // 1. User's Custom Forged & Customized Bass Instruments
+    match /users/{userId}/instruments/{instrumentId} {
+      allow get: if isSignedIn() && isValidId(userId) && isValidId(instrumentId) && request.auth.uid == userId && existing().userId == request.auth.uid;
+      allow list: if isSignedIn() && request.auth.uid == userId;
+
+      allow create: if isSignedIn() &&
+                       isValidId(userId) &&
+                       isValidId(instrumentId) &&
+                       request.auth.uid == userId &&
+                       isValidUserInstrument(incoming());
+
+      allow update: if isValidUserInstrument(incoming()) &&
+                       isSignedIn() &&
+                       isValidId(userId) &&
+                       isValidId(instrumentId) &&
+                       request.auth.uid == userId &&
+                       existing().userId == request.auth.uid &&
+                       incoming().userId == existing().userId &&
+                       incoming().createdAt == existing().createdAt &&
+                       incoming().diff(existing()).affectedKeys().hasOnly([
+                         'name', 'category', 'description', 'waveform',
+                         'baseFreqHz', 'subOctaveMix', 'cutoffHz', 'resonance', 'drive',
+                         'attackMs', 'decayMs', 'lfoRateHz', 'lfoDepth',
+                         'accentColorHex', 'animationStyle', 'padVisualPrompt',
+                         'padImageBase64', 'padVideoUri', 'aiThinkingSummary', 'updatedAt'
+                       ]);
+
+      allow delete: if isSignedIn() && isValidId(userId) && isValidId(instrumentId) && request.auth.uid == userId && existing().userId == request.auth.uid;
+    }
+
+    // 2. User's Cloud MIDI Sequencer Patterns
+    match /users/{userId}/midi_patterns/{patternId} {
+      allow get: if isSignedIn() && isValidId(userId) && isValidId(patternId) && request.auth.uid == userId && existing().userId == request.auth.uid;
+      allow list: if isSignedIn() && request.auth.uid == userId;
+
+      allow create: if isSignedIn() &&
+                       isValidId(userId) &&
+                       isValidId(patternId) &&
+                       request.auth.uid == userId &&
+                       isValidMidiPattern(incoming());
+
+      allow update: if isValidMidiPattern(incoming()) &&
+                       isSignedIn() &&
+                       isValidId(userId) &&
+                       isValidId(patternId) &&
+                       request.auth.uid == userId &&
+                       existing().userId == request.auth.uid &&
+                       incoming().userId == existing().userId &&
+                       incoming().createdAt == existing().createdAt &&
+                       incoming().diff(existing()).affectedKeys().hasOnly([
+                         'name', 'instrumentId', 'instrumentName',
+                         'bpm', 'swingPercent', 'stepsJson', 'vstSyncChannel', 'updatedAt'
+                       ]);
+
+      allow delete: if isSignedIn() && isValidId(userId) && isValidId(patternId) && request.auth.uid == userId && existing().userId == request.auth.uid;
+    }
+
+    // 3. Community Shared Bass Instruments
+    match /shared_instruments/{sharedId} {
+      allow get: if isSignedIn() && isValidId(sharedId) && (existing().visibility == 'PUBLIC' || existing().userId == request.auth.uid);
+      allow list: if isSignedIn() && existing().visibility == 'PUBLIC';
+
+      allow create: if isSignedIn() &&
+                       isValidId(sharedId) &&
+                       isValidSharedInstrument(incoming()) &&
+                       incoming().userId == request.auth.uid;
+
+      allow update: if isValidSharedInstrument(incoming()) &&
+                       isSignedIn() &&
+                       isValidId(sharedId) &&
+                       incoming().userId == existing().userId &&
+                       incoming().createdAt == existing().createdAt && (
+                         // Action 1: Owner updates instrument parameters or description
+                         (existing().userId == request.auth.uid &&
+                          incoming().diff(existing()).affectedKeys().hasOnly([
+                            'name', 'description', 'cutoffHz', 'resonance', 'drive',
+                            'lfoRateHz', 'lfoDepth', 'visibility', 'updatedAt'
+                          ])) ||
+                         // Action 2: Community member leaves feedback, upvote, or download count increment on PUBLIC instrument
+                         (existing().visibility == 'PUBLIC' &&
+                          incoming().diff(existing()).affectedKeys().hasOnly([
+                            'likesCount', 'downloadsCount', 'lastFeedbackText', 'lastFeedbackAuthor', 'updatedAt'
+                          ]) &&
+                          incoming().likesCount >= existing().likesCount &&
+                          incoming().likesCount <= existing().likesCount + 1 &&
+                          incoming().downloadsCount >= existing().downloadsCount &&
+                          incoming().downloadsCount <= existing().downloadsCount + 1)
+                       );
+
+      allow delete: if isSignedIn() && isValidId(sharedId) && existing().userId == request.auth.uid;
+    }
+  }
+}
