@@ -1,0 +1,335 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no, viewport-fit=cover" />
+  <title>SubForge Bass — 9:16 Vertical Full-Screen Pocket Bass Synth</title>
+  <meta name="description" content="100% mobile-responsive 9:16 vertical full-screen bass synthesizer instrument with 3x4 multi-touch silicone pads, fretless glide surface, interactive oscilloscope XY expression, 2D Sonic DNA instrument creator, 16-step sequencer, and community patch hub." />
+  <link rel="preconnect" href="https://fonts.googleapis.com" />
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600&family=JetBrains+Mono:wght@500;600;700&family=Space+Grotesk:wght@600;700&display=swap" rel="stylesheet" />
+  <link rel="stylesheet" href="./styles/index.css" />
+</head>
+<body>
+  <div class="viewport-frame">
+    <div id="handheld-stage" class="handheld-stage">
+
+      <!-- FLOATING EXIT BUTTON IN FULL-SCREEN ZEN MODE -->
+      <button type="button" id="btn-exit-zen" class="zen-exit-pill" aria-label="Exit Full-Screen Performance Mode">
+        <span>✕ EXIT FULL</span>
+      </button>
+
+      <!-- FLOATING NOTIFICATION TOAST -->
+      <div id="mobile-toast" class="mobile-toast is-hidden" role="status" aria-live="polite">
+        <span id="mobile-toast-text"></span>
+        <button type="button" id="mobile-toast-close" style="font-family:var(--font-mono);font-size:10px;color:var(--text-muted);">OK</button>
+      </div>
+
+      <!-- ZONE A: COMPACT SWIPEABLE TOP HEADER -->
+      <header class="top-console" role="banner">
+        <button type="button" id="btn-open-bank" class="patch-selector-pill" title="Tap to open Instrument Bank or swipe left/right">
+          <span id="top-patch-led" class="patch-led-dot"></span>
+          <span class="patch-pill-text">
+            <span id="top-patch-name" class="patch-pill-name">01. SubZero 808</span>
+            <span id="top-patch-sub" class="patch-pill-sub">SINE • 41.2Hz • SWIPE ⇄</span>
+          </span>
+          <span class="patch-pill-caret">▾</span>
+        </button>
+
+        <div class="top-actions">
+          <button type="button" id="btn-top-play" class="mini-transport-btn" title="Play/Stop Sequencer (Space)">
+            <span id="top-play-icon">▶</span>
+            <span id="top-bpm-num">124</span>
+          </button>
+
+          <button type="button" id="btn-top-riff" class="icon-square-btn" title="Play Demo Riff" aria-label="Play Demo Riff">
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+              <path d="M9 18V5l12-2v13" />
+              <circle cx="6" cy="18" r="3" />
+              <circle cx="18" cy="16" r="3" />
+            </svg>
+          </button>
+
+          <button type="button" id="btn-enter-zen" class="icon-square-btn" title="Full-Screen Performance Mode" aria-label="Full-Screen Performance Mode">
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+              <polyline points="15 3 21 3 21 9" />
+              <polyline points="9 21 3 21 3 15" />
+              <line x1="21" y1="3" x2="14" y2="10" />
+              <line x1="3" y1="21" x2="10" y2="14" />
+            </svg>
+          </button>
+        </div>
+      </header>
+
+      <!-- ZONE B: INTERACTIVE LIVE OSCILLOSCOPE + X/Y EXPRESSION RIBBON -->
+      <section class="scope-ribbon-zone" aria-label="Live Oscilloscope and XY Expression">
+        <div id="xy-scope-deck" class="xy-scope-deck" role="application" aria-label="Touch and drag to sweep Filter Cutoff and Drive">
+          <canvas id="xy-scope-canvas" class="xy-scope-canvas" width="420" height="110"></canvas>
+          <span id="xy-hud-tl" class="xy-hud-tl">XY FILTER • DRAG WAVE</span>
+          <span id="xy-hud-tr" class="xy-hud-tr">C1 • 41.2Hz</span>
+          <span id="xy-hud-bl" class="xy-hud-bl">CUT OPEN • DRV 32%</span>
+          <button type="button" id="btn-xy-hold" class="xy-hold-btn">HOLD</button>
+        </div>
+
+        <div class="micro-control-strip">
+          <div class="surface-mode-switch" role="tablist" aria-label="Play Surface Mode">
+            <button type="button" id="mode-pads-btn" class="surface-btn is-active" role="tab" aria-selected="true">12-PAD</button>
+            <button type="button" id="mode-glide-btn" class="surface-btn" role="tab" aria-selected="false">GLIDE</button>
+          </div>
+
+          <div class="micro-right-group">
+            <div class="oct-stepper" aria-label="Octave Shift">
+              <button type="button" id="oct-dec-btn" class="oct-step-btn" aria-label="Octave down">−</button>
+              <span id="oct-val-label" class="oct-val">OCT 0</span>
+              <button type="button" id="oct-inc-btn" class="oct-step-btn" aria-label="Octave up">+</button>
+            </div>
+            <button type="button" id="btn-bt-boost" class="micro-pill-btn is-on" title="Bluetooth Sub-Harmonic Exciter">BT SUB</button>
+          </div>
+        </div>
+      </section>
+
+      <!-- ZONE C: FULL-BLEED VERTICAL INSTRUMENT PLAY STAGE -->
+      <main class="play-stage" aria-label="Full-Screen Playable Bass Surface">
+        <!-- 3x4 Giant Vertical Silicone Drum Pads -->
+        <div id="vertical-pad-grid" class="vertical-pad-grid" role="group" aria-label="12 vertical chromatic bass drum pads"></div>
+
+        <!-- Continuous Fretless Sub-Bass Glide Surface -->
+        <div id="glide-surface" class="glide-surface is-hidden" role="application" aria-label="Fretless bass pitch and filter glide pad">
+          <canvas id="glide-canvas" class="glide-canvas" width="420" height="560"></canvas>
+          <div class="glide-hud">
+            <span>SLIDE VERTICAL = <strong>PITCH</strong></span>
+            <span id="glide-readout"><strong>C1</strong> • 41.2Hz</span>
+          </div>
+        </div>
+      </main>
+
+      <!-- ZONE D: THUMB-REACH BOTTOM HARDWARE DOCK -->
+      <nav class="bottom-dock" aria-label="Studio Drawers">
+        <button type="button" class="dock-btn" data-sheet="sculpt">
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round">
+            <line x1="4" y1="21" x2="4" y2="14" /><line x1="4" y1="10" x2="4" y2="3" />
+            <line x1="12" y1="21" x2="12" y2="12" /><line x1="12" y1="8" x2="12" y2="3" />
+            <line x1="20" y1="21" x2="20" y2="16" /><line x1="20" y1="12" x2="20" y2="3" />
+            <line x1="1" y1="14" x2="7" y2="14" /><line x1="9" y1="8" x2="15" y2="8" /><line x1="17" y1="16" x2="23" y2="16" />
+          </svg>
+          <span>Sculpt</span>
+        </button>
+
+        <button type="button" class="dock-btn" data-sheet="seq">
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+            <rect x="3" y="3" width="7" height="7" rx="1" /><rect x="14" y="3" width="7" height="7" rx="1" />
+            <rect x="3" y="14" width="7" height="7" rx="1" /><rect x="14" y="14" width="7" height="7" rx="1" />
+          </svg>
+          <span>Seq</span>
+        </button>
+
+        <button type="button" class="dock-btn dock-btn-create" data-sheet="create" aria-label="Create New Full-Screen Instrument">
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round">
+            <line x1="12" y1="5" x2="12" y2="19" />
+            <line x1="5" y1="12" x2="19" y2="12" />
+          </svg>
+          <span>Create</span>
+        </button>
+
+        <button type="button" class="dock-btn" data-sheet="bank">
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round">
+            <path d="M4 6h16M4 12h16M4 18h10" />
+          </svg>
+          <span>Bank</span>
+        </button>
+
+        <button type="button" class="dock-btn" data-sheet="hub">
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+            <circle cx="12" cy="12" r="9" />
+            <path d="M3.6 9h16.8M3.6 15h16.8" />
+            <path d="M11.5 3a17 17 0 0 0 0 18M12.5 3a17 17 0 0 1 0 18" />
+          </svg>
+          <span>Hub</span>
+        </button>
+      </nav>
+
+      <!-- SHEET BACKDROP -->
+      <div id="sheet-backdrop" class="sheet-backdrop"></div>
+
+      <!-- ==================================================================
+           SHEET 1: "+ CREATE INSTRUMENT" (2D SONIC DNA + VOICE/AI FORGE)
+           ================================================================== -->
+      <section id="sheet-create" class="bottom-sheet" aria-label="Create Full-Screen Bass Instrument">
+        <div class="sheet-handle-bar">
+          <div class="sheet-grabber"></div>
+          <div class="sheet-head-row">
+            <h2 class="sheet-title"><span id="create-led-preview" class="patch-led-dot"></span> Create Full-Screen Instrument</h2>
+            <button type="button" class="sheet-close-btn" data-close-sheet>DONE</button>
+          </div>
+        </div>
+
+        <div class="sheet-body">
+          <div>
+            <span class="sec-label">1. TOUCH &amp; MORPH SONIC DNA (DRAG TO SCULPT &amp; HEAR LIVE)</span>
+            <div id="dna-sculpt-well" class="dna-sculpt-well">
+              <canvas id="dna-canvas" class="dna-canvas" width="400" height="200"></canvas>
+              <span class="dna-axis-label dna-axis-top">AGGRESSIVE GRIT + WOBBLE</span>
+              <span class="dna-axis-label dna-axis-bottom">WARM CLEAN ANALOG</span>
+              <span class="dna-axis-label dna-axis-left">PURE SUB</span>
+              <span class="dna-axis-label dna-axis-right">METALLIC FM</span>
+            </div>
+          </div>
+
+          <div id="dna-live-specs" class="dna-live-specs"></div>
+
+          <div>
+            <span class="sec-label">2. OR SPEAK / DESCRIBE WITH AI FORGE</span>
+            <div style="display:flex;gap:6px;margin-bottom:8px;">
+              <button type="button" id="create-mic-btn" class="hw-btn" style="padding:0 11px;" title="Voice Dictation">🎤</button>
+              <input id="create-prompt-input" class="hw-input" type="text" placeholder="e.g. Chest-rattling 808 with gritty Reese buzz…" />
+              <button type="button" id="create-ai-parse-btn" class="hw-btn">Forge</button>
+            </div>
+            <div id="create-mood-row" class="mood-chip-row"></div>
+          </div>
+
+          <div>
+            <span class="sec-label">3. INSTRUMENT NAME &amp; HARDWARE LED COLOR</span>
+            <input id="create-name-input" class="hw-input" type="text" value="Custom Obsidian Sub" style="margin-bottom:8px;" />
+            <div id="create-swatch-row" class="led-swatch-row"></div>
+          </div>
+
+          <div class="create-cta-row">
+            <button type="button" id="create-audition-btn" class="hw-btn">▶ Audition</button>
+            <button type="button" id="create-launch-fs-btn" class="hw-btn is-primary">USE IN FULL SCREEN ⛶</button>
+          </div>
+        </div>
+      </section>
+
+      <!-- ==================================================================
+           SHEET 2: REAL-TIME DSP SCULPT DRAWER
+           ================================================================== -->
+      <section id="sheet-sculpt" class="bottom-sheet" aria-label="Real-Time DSP Synth Rack">
+        <div class="sheet-handle-bar">
+          <div class="sheet-grabber"></div>
+          <div class="sheet-head-row">
+            <h2 class="sheet-title">DSP Synth Sculpt</h2>
+            <div style="display:flex;gap:6px;">
+              <button type="button" id="btn-sculpt-save" class="sheet-close-btn" style="color:var(--accent-emerald);">SAVE COPY</button>
+              <button type="button" class="sheet-close-btn" data-close-sheet>DONE</button>
+            </div>
+          </div>
+        </div>
+
+        <div class="sheet-body">
+          <div>
+            <span class="sec-label">OSCILLATOR TOPOLOGY</span>
+            <div id="sculpt-wf-grid" class="wf-grid"></div>
+          </div>
+
+          <div>
+            <span class="sec-label">FILTER, DRIVE, SUB &amp; LFO FADERS</span>
+            <div id="sculpt-fader-stack" class="fader-stack"></div>
+          </div>
+
+          <div>
+            <span class="sec-label">PAD REACTIVE VISUALIZER</span>
+            <div id="sculpt-anim-row" class="mood-chip-row"></div>
+          </div>
+        </div>
+      </section>
+
+      <!-- ==================================================================
+           SHEET 3: 16-STEP MOBILE SEQUENCER (4x4 THUMB GRID)
+           ================================================================== -->
+      <section id="sheet-seq" class="bottom-sheet" aria-label="16-Step Bass Sequencer">
+        <div class="sheet-handle-bar">
+          <div class="sheet-grabber"></div>
+          <div class="sheet-head-row">
+            <h2 class="sheet-title">16-Step Sequencer</h2>
+            <div style="display:flex;gap:6px;">
+              <button type="button" id="seq-sheet-play" class="sheet-close-btn" style="color:var(--accent-primary);">▶ PLAY</button>
+              <button type="button" class="sheet-close-btn" data-close-sheet>DONE</button>
+            </div>
+          </div>
+        </div>
+
+        <div class="sheet-body">
+          <div style="display:flex;gap:6px;flex-wrap:wrap;">
+            <button type="button" id="seq-ai-groove-btn" class="hw-btn" style="flex:1;">AI Groove</button>
+            <button type="button" id="seq-clear-btn" class="hw-btn is-ghost">Clear</button>
+            <button type="button" id="seq-export-mid-btn" class="hw-btn">Export .MID</button>
+          </div>
+
+          <div class="fader-stack">
+            <div class="fader-item">
+              <div class="fader-head"><span>BPM TEMPO</span><strong id="seq-bpm-val">124 BPM</strong></div>
+              <input id="seq-bpm-slider" class="hw-range" type="range" min="60" max="200" value="124" />
+            </div>
+            <div class="fader-item">
+              <div class="fader-head"><span>SWING</span><strong id="seq-swing-val">14%</strong></div>
+              <input id="seq-swing-slider" class="hw-range" type="range" min="0" max="65" value="14" />
+            </div>
+          </div>
+
+          <div id="seq-4x4-grid" class="seq-4x4-grid"></div>
+
+          <div>
+            <span id="seq-step-label" class="sec-label">STEP 01 — NOTE PITCH &amp; AUTOMATION</span>
+            <div id="seq-note-grid" class="note-6x2-grid" style="margin-bottom:10px;"></div>
+            <div class="fader-stack">
+              <div class="fader-item">
+                <div class="fader-head"><span>VELOCITY</span><strong id="seq-vel-val">121</strong></div>
+                <input id="seq-vel-slider" class="hw-range" type="range" min="0.2" max="1" step="0.01" value="0.95" />
+              </div>
+              <div class="fader-item">
+                <div class="fader-head"><span>FILTER CC#74</span><strong id="seq-cc-val">50%</strong></div>
+                <input id="seq-cc-slider" class="hw-range" type="range" min="0" max="1" step="0.01" value="0.5" />
+              </div>
+            </div>
+          </div>
+
+          <div>
+            <span class="sec-label">SAVED GROOVE PATTERNS</span>
+            <div id="seq-pattern-list" class="bank-list"></div>
+          </div>
+        </div>
+      </section>
+
+      <!-- ==================================================================
+           SHEET 4: INSTRUMENT BANK (12 ORIGINALS + CUSTOM CREATED)
+           ================================================================== -->
+      <section id="sheet-bank" class="bottom-sheet" aria-label="Instrument Bank">
+        <div class="sheet-handle-bar">
+          <div class="sheet-grabber"></div>
+          <div class="sheet-head-row">
+            <h2 id="bank-sheet-title" class="sheet-title">Instrument Bank (12)</h2>
+            <button type="button" class="sheet-close-btn" data-close-sheet>DONE</button>
+          </div>
+        </div>
+
+        <div class="sheet-body">
+          <div id="bank-list" class="bank-list"></div>
+        </div>
+      </section>
+
+      <!-- ==================================================================
+           SHEET 5: COMMUNITY BASS HUB
+           ================================================================== -->
+      <section id="sheet-hub" class="bottom-sheet" aria-label="Community Bass Hub">
+        <div class="sheet-handle-bar">
+          <div class="sheet-grabber"></div>
+          <div class="sheet-head-row">
+            <h2 class="sheet-title">Community Bass Hub</h2>
+            <button type="button" class="sheet-close-btn" data-close-sheet>DONE</button>
+          </div>
+        </div>
+
+        <div class="sheet-body">
+          <button type="button" id="hub-publish-btn" class="hw-btn is-primary" style="width:100%;">
+            Publish Active Instrument to Community
+          </button>
+          <div id="hub-list" class="comm-list"></div>
+        </div>
+      </section>
+
+    </div>
+  </div>
+
+  <script type="module" src="./js/app.js"></script>
+</body>
+</html>
