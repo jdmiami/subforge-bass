@@ -14,10 +14,30 @@
   <div class="viewport-frame">
     <div id="handheld-stage" class="handheld-stage">
 
-      <!-- FLOATING EXIT BUTTON IN FULL-SCREEN ZEN MODE -->
-      <button type="button" id="btn-exit-zen" class="zen-exit-pill" aria-label="Exit Full-Screen Performance Mode">
-        <span>✕ EXIT FULL</span>
-      </button>
+      <!-- FLOATING MINIMAL GAME HUD PILL IN FULL-SCREEN MODE (AUTO-DIMS WHILE PLAYING) -->
+      <div id="zen-hud-pill" class="zen-hud-pill" role="toolbar" aria-label="Full-Screen Performance HUD">
+        <button type="button" id="zen-patch-btn" class="zen-patch-btn" title="Swipe left/right to switch bass, tap for Bank">
+          <span id="zen-patch-led" class="patch-led-dot"></span>
+          <span class="zen-patch-text">
+            <span id="zen-patch-name" class="zen-patch-name">01. SubZero 808</span>
+            <span id="zen-patch-meta" class="zen-patch-meta">SWIPE ⇄ PATCH</span>
+          </span>
+        </button>
+
+        <span class="zen-hud-divider" aria-hidden="true"></span>
+
+        <button type="button" id="zen-mode-btn" class="zen-chip-btn" title="Cycle Play Interface">
+          <span id="zen-mode-label">MORPH</span>
+        </button>
+
+        <button type="button" id="zen-play-btn" class="zen-icon-btn" title="Play/Stop Groove" aria-label="Play or Stop Groove">
+          <span id="zen-play-icon">▶</span>
+        </button>
+
+        <button type="button" id="btn-exit-zen" class="zen-icon-btn zen-close-btn" aria-label="Exit Full-Screen Performance Mode" title="Exit Full-Screen">
+          ✕
+        </button>
+      </div>
 
       <!-- FLOATING NOTIFICATION TOAST -->
       <div id="mobile-toast" class="mobile-toast is-hidden" role="status" aria-live="polite">
@@ -73,7 +93,8 @@
 
         <div class="micro-control-strip">
           <div class="surface-mode-switch" role="tablist" aria-label="Play Surface Mode">
-            <button type="button" id="mode-pads-btn" class="surface-btn is-active" role="tab" aria-selected="true">12-PAD</button>
+            <button type="button" id="mode-morph-btn" class="surface-btn is-active" role="tab" aria-selected="true">MORPH</button>
+            <button type="button" id="mode-pads-btn" class="surface-btn" role="tab" aria-selected="false">12-PAD</button>
             <button type="button" id="mode-glide-btn" class="surface-btn" role="tab" aria-selected="false">GLIDE</button>
           </div>
 
@@ -90,8 +111,13 @@
 
       <!-- ZONE C: FULL-BLEED VERTICAL INSTRUMENT PLAY STAGE -->
       <main class="play-stage" aria-label="Full-Screen Playable Bass Surface">
+        <!-- Flagship: Liquid-Metal Morph Grid (Fluid Thumb-Swipe x Tactile Button Hybrid) -->
+        <div id="morph-surface" class="morph-surface" role="application" aria-label="Liquid-Metal Morph Grid playable bass field">
+          <canvas id="morph-canvas" class="morph-canvas"></canvas>
+        </div>
+
         <!-- 3x4 Giant Vertical Silicone Drum Pads -->
-        <div id="vertical-pad-grid" class="vertical-pad-grid" role="group" aria-label="12 vertical chromatic bass drum pads"></div>
+        <div id="vertical-pad-grid" class="vertical-pad-grid is-hidden" role="group" aria-label="12 vertical chromatic bass drum pads"></div>
 
         <!-- Continuous Fretless Sub-Bass Glide Surface -->
         <div id="glide-surface" class="glide-surface is-hidden" role="application" aria-label="Fretless bass pitch and filter glide pad">

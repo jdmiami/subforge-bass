@@ -20,10 +20,17 @@ import {
   createDefaultGrooveSteps,
 } from './presets.js';
 import { WebBassAudioEngine } from './audio-engine.js';
+import { LiquidMorphGrid } from './morph-grid.js';
 import {
   synthesizeInstrumentSpec,
   VoicePromptController,
 } from './ai-forge.js';
+
+const PLAY_SURFACES = [
+  { id: 'morph', label: 'MORPH', title: 'Liquid-Metal Morph Grid' },
+  { id: 'pads', label: '12-PAD', title: '3x4 Tactile Drum Pads' },
+  { id: 'glide', label: 'GLIDE', title: 'Fretless Sub Glide' },
+];
 
 const STORAGE_KEYS = {
   CUSTOM_INSTRUMENTS: 'subforge_mobile_custom_v2',
@@ -92,7 +99,7 @@ class SubForgeMobileStudio {
       octaveShift: 0,
       lastTriggeredPad: 0,
       btSubBoost: true,
-      playSurface: 'pads', // 'pads' | 'glide'
+      playSurface: 'morph', // 'morph' | 'pads' | 'glide'
       isZenFullscreen: false,
       openSheet: null,
 
@@ -136,6 +143,8 @@ class SubForgeMobileStudio {
     this.scheduleStep = 0;
     this.dnaLastAudition = 0;
     this.voiceController = null;
+    this.morphGrid = null;
+    this.zenHudDimTimer = null;
 
     this.init();
   }
@@ -209,8 +218,24 @@ class SubForgeMobileStudio {
 
   init() {
     this.cacheDom();
+    this.morphGrid = new LiquidMorphGrid({
+      canvas: this.dom.morphCanvas,
+      container: this.dom.morphSurface,
+      engine: this.engine,
+      getInstrument: () => this.state.selectedInstrument,
+      getPadNotes: () => this.getActivePadNotes(),
+      isZenMode: () => this.state.isZenFullscreen,
+      onTapNote: (padIdx, vel) => this.triggerPad(padIdx, vel, null, null, false),
+      onGlideNote: (padIdx, vel) => this.triggerPad(padIdx, vel * 0.62, null, null, false),
+      onNoteReadout: (label) => {
+        this.dom.xyHudTr.textContent = label;
+        if (this.dom.zenPatchMeta) this.dom.zenPatchMeta.textContent = label;
+      },
+      onPlayActivity: (active) => this.setZenHudDimmed(active),
+    });
     this.bindEvents();
     this.selectInstrument(this.state.selectedInstrument, false);
+    this.setPlaySurface(this.state.playSurface);
     this.renderCreateSheet();
     this.renderSculptSheet();
     this.renderSeqSheet();
@@ -225,6 +250,15 @@ class SubForgeMobileStudio {
       stage: $('handheld-stage'),
       btnExitZen: $('btn-exit-zen'),
       btnEnterZen: $('btn-enter-zen'),
+      zenHudPill: $('zen-hud-pill'),
+      zenPatchBtn: $('zen-patch-btn'),
+      zenPatchLed: $('zen-patch-led'),
+      zenPatchName: $('zen-patch-name'),
+      zenPatchMeta: $('zen-patch-meta'),
+      zenModeBtn: $('zen-mode-btn'),
+      zenModeLabel: $('zen-mode-label'),
+      zenPlayBtn: $('zen-play-btn'),
+      zenPlayIcon: $('zen-play-icon'),
       toast: $('mobile-toast'),
       toastText: $('mobile-toast-text'),
       toastClose: $('mobile-toast-close'),
@@ -246,6 +280,7 @@ class SubForgeMobileStudio {
       xyHudTr: $('xy-hud-tr'),
       xyHudBl: $('xy-hud-bl'),
       btnXyHold: $('btn-xy-hold'),
+      modeMorphBtn: $('mode-morph-btn'),
       modePadsBtn: $('mode-pads-btn'),
       modeGlideBtn: $('mode-glide-btn'),
       octDecBtn: $('oct-dec-btn'),
@@ -254,6 +289,8 @@ class SubForgeMobileStudio {
       btnBtBoost: $('btn-bt-boost'),
 
       // Play Surfaces
+      morphSurface: $('morph-surface'),
+      morphCanvas: $('morph-canvas'),
       padGrid: $('vertical-pad-grid'),
       glideSurface: $('glide-surface'),
       glideCanvas: $('glide-canvas'),
@@ -336,11 +373,39 @@ class SubForgeMobileStudio {
     // Transport, Demo Riff & Full-Screen Zen Mode
     this.dom.btnTopPlay.addEventListener('click', () => this.toggleSequencer());
     this.dom.seqSheetPlay.addEventListener('click', () => this.toggleSequencer());
+    this.dom.zenPlayBtn.addEventListener('click', () => this.toggleSequencer());
     this.dom.btnTopRiff.addEventListener('click', () => this.playDemoRiff());
     this.dom.btnEnterZen.addEventListener('click', () => this.setZenFullscreen(true));
     this.dom.btnExitZen.addEventListener('click', () => this.setZenFullscreen(false));
 
-    // Surface switcher (12-PAD vs FRETLESS GLIDE)
+    // Floating Minimal Game HUD Pill: Swipe left/right to hot-swap bass, tap to open Bank
+    let zenSwipeX = 0;
+    let zenSwipeHandled = false;
+    this.dom.zenPatchBtn.addEventListener('pointerdown', (e) => {
+      zenSwipeX = e.clientX;
+      zenSwipeHandled = false;
+    });
+    this.dom.zenPatchBtn.addEventListener('pointerup', (e) => {
+      const dx = e.clientX - zenSwipeX;
+      if (Math.abs(dx) > 32) {
+        zenSwipeHandled = true;
+        this.cycleInstrument(dx < 0 ? 1 : -1);
+      }
+    });
+    this.dom.zenPatchBtn.addEventListener('click', () => {
+      if (!zenSwipeHandled) this.openSheet('bank');
+    });
+
+    // Floating Game HUD Pill: 1-tap cycle through play interfaces (MORPH -> 12-PAD -> GLIDE)
+    this.dom.zenModeBtn.addEventListener('click', () => this.cyclePlaySurface(1));
+
+    // Keep Morph Grid sized cleanly when browser fullscreen changes
+    document.addEventListener('fullscreenchange', () => {
+      requestAnimationFrame(() => this.morphGrid?.resize());
+    });
+
+    // Surface switcher (MORPH vs 12-PAD vs FRETLESS GLIDE)
+    this.dom.modeMorphBtn.addEventListener('click', () => this.setPlaySurface('morph'));
     this.dom.modePadsBtn.addEventListener('click', () => this.setPlaySurface('pads'));
     this.dom.modeGlideBtn.addEventListener('click', () => this.setPlaySurface('glide'));
 
@@ -413,7 +478,11 @@ class SubForgeMobileStudio {
         this.triggerPad(idx, 0.65 + relY * 0.35);
       }
     });
-    const clearPtr = (e) => this.pointerActivePad.delete(e.pointerId);
+    const clearPtr = (e) => {
+      if (this.pointerActivePad.delete(e.pointerId) && this.pointerActivePad.size === 0) {
+        this.setZenHudDimmed(false);
+      }
+    };
     window.addEventListener('pointerup', clearPtr);
     window.addEventListener('pointercancel', clearPtr);
 
@@ -432,12 +501,14 @@ class SubForgeMobileStudio {
       this.state.glideNoteLabel = `${nearest.noteName} • ${freq.toFixed(1)}Hz`;
       this.dom.glideReadout.innerHTML = `<strong>${nearest.noteName}</strong> • ${freq.toFixed(1)}Hz`;
       this.dom.xyHudTr.textContent = this.state.glideNoteLabel;
+      if (this.dom.zenPatchMeta) this.dom.zenPatchMeta.textContent = this.state.glideNoteLabel;
       return { freq, filterNorm: nx };
     };
 
     this.dom.glideSurface.addEventListener('pointerdown', (e) => {
       e.preventDefault();
       this.state.glideActive = true;
+      this.setZenHudDimmed(true);
       this.dom.glideSurface.setPointerCapture(e.pointerId);
       const { freq, filterNorm } = calcGlide(e);
       this.engine.startGlideVoice(freq, filterNorm);
@@ -450,6 +521,7 @@ class SubForgeMobileStudio {
     const stopGlide = () => {
       if (!this.state.glideActive) return;
       this.state.glideActive = false;
+      this.setZenHudDimmed(false);
       this.engine.stopGlideVoice();
     };
     this.dom.glideSurface.addEventListener('pointerup', stopGlide);
@@ -628,22 +700,67 @@ class SubForgeMobileStudio {
     this.dom.stage.classList.toggle('is-zen', this.state.isZenFullscreen);
     if (this.state.isZenFullscreen) {
       this.closeAllSheets();
+      this.setZenHudDimmed(false);
       if (document.documentElement.requestFullscreen && !document.fullscreenElement) {
         document.documentElement.requestFullscreen().catch(() => {});
       }
-    } else if (document.fullscreenElement && document.exitFullscreen) {
-      document.exitFullscreen().catch(() => {});
+    } else {
+      this.setZenHudDimmed(false);
+      if (document.fullscreenElement && document.exitFullscreen) {
+        document.exitFullscreen().catch(() => {});
+      }
+    }
+    requestAnimationFrame(() => this.morphGrid?.resize());
+  }
+
+  setZenHudDimmed(active) {
+    if (!this.dom.zenHudPill) return;
+    clearTimeout(this.zenHudDimTimer);
+    if (active && this.state.isZenFullscreen) {
+      this.dom.zenHudPill.classList.add('is-dimmed');
+    } else {
+      this.zenHudDimTimer = setTimeout(() => {
+        this.dom.zenHudPill?.classList.remove('is-dimmed');
+      }, active ? 0 : 1200);
     }
   }
 
+  cyclePlaySurface(dir = 1) {
+    const curIdx = PLAY_SURFACES.findIndex((s) => s.id === this.state.playSurface);
+    const next = PLAY_SURFACES[(curIdx + dir + PLAY_SURFACES.length) % PLAY_SURFACES.length];
+    this.setPlaySurface(next.id);
+    this.showToast(`Interface: ${next.title}`);
+  }
+
   setPlaySurface(mode) {
-    this.state.playSurface = mode;
-    const isGlide = mode === 'glide';
-    this.dom.modePadsBtn.classList.toggle('is-active', !isGlide);
+    const valid = PLAY_SURFACES.find((s) => s.id === mode) ? mode : 'morph';
+    this.state.playSurface = valid;
+
+    const isMorph = valid === 'morph';
+    const isPads = valid === 'pads';
+    const isGlide = valid === 'glide';
+
+    this.dom.modeMorphBtn.classList.toggle('is-active', isMorph);
+    this.dom.modeMorphBtn.setAttribute('aria-selected', String(isMorph));
+    this.dom.modePadsBtn.classList.toggle('is-active', isPads);
+    this.dom.modePadsBtn.setAttribute('aria-selected', String(isPads));
     this.dom.modeGlideBtn.classList.toggle('is-active', isGlide);
-    this.dom.padGrid.classList.toggle('is-hidden', isGlide);
+    this.dom.modeGlideBtn.setAttribute('aria-selected', String(isGlide));
+
+    this.dom.morphSurface.classList.toggle('is-hidden', !isMorph);
+    this.dom.padGrid.classList.toggle('is-hidden', !isPads);
     this.dom.glideSurface.classList.toggle('is-hidden', !isGlide);
+
+    const meta = PLAY_SURFACES.find((s) => s.id === valid);
+    if (this.dom.zenModeLabel && meta) {
+      this.dom.zenModeLabel.textContent = meta.label;
+    }
+
     if (!isGlide) this.engine.stopGlideVoice();
+    if (!isMorph) this.engine.stopAllLiquidVoices();
+    if (isMorph) {
+      requestAnimationFrame(() => this.morphGrid?.resize());
+    }
   }
 
   openSheet(name) {
@@ -696,6 +813,11 @@ class SubForgeMobileStudio {
     this.dom.topPatchSub.textContent = `${inst.waveform} • ${inst.baseFreqHz.toFixed(1)}Hz • SWIPE ⇄`;
     this.dom.xyHudBl.textContent = `CUT OPEN • DRV ${Math.round(inst.drive * 100)}%`;
 
+    if (this.dom.zenPatchName) this.dom.zenPatchName.textContent = inst.name;
+    if (this.dom.zenPatchMeta) {
+      this.dom.zenPatchMeta.textContent = `${inst.waveform} • ${inst.baseFreqHz.toFixed(1)}Hz • SWIPE ⇄`;
+    }
+
     this.renderPadGrid();
     if (this.state.openSheet === 'sculpt') this.renderSculptSheet();
     if (this.state.openSheet === 'bank') this.renderBankSheet();
@@ -747,6 +869,7 @@ class SubForgeMobileStudio {
       pad.addEventListener('pointerdown', (e) => {
         e.preventDefault();
         this.pointerActivePad.set(e.pointerId, padIdx);
+        this.setZenHudDimmed(true);
         const rect = pad.getBoundingClientRect();
         const relY = Math.max(0, Math.min(1, (e.clientY - rect.top) / rect.height));
         this.triggerPad(padIdx, 0.65 + relY * 0.35);
@@ -756,15 +879,21 @@ class SubForgeMobileStudio {
     });
   }
 
-  triggerPad(padIndex, velocity = 0.94, filterMod = null, scheduledTime = null) {
+  triggerPad(padIndex, velocity = 0.94, filterMod = null, scheduledTime = null, pulseMorph = true) {
     const idx = Math.max(0, Math.min(11, padIndex));
     this.engine.triggerPad(idx, velocity, filterMod, scheduledTime);
 
     const applyVisual = () => {
       this.state.lastTriggeredPad = idx;
       const spec = this.getActivePadNotes()[idx];
-      this.dom.xyHudTr.textContent = `${spec.noteName} • ${spec.frequencyHz.toFixed(1)}Hz`;
+      const noteText = `${spec.noteName} • ${spec.frequencyHz.toFixed(1)}Hz`;
+      this.dom.xyHudTr.textContent = noteText;
+      if (this.dom.zenPatchMeta) this.dom.zenPatchMeta.textContent = noteText;
       this.padFx[idx] = { energy: 1, hitTime: performance.now() };
+
+      if (pulseMorph && this.state.playSurface === 'morph' && this.morphGrid) {
+        this.morphGrid.pulseCell(idx, velocity);
+      }
 
       const prev = this.dom.padGrid.querySelector('.bass-pad.is-last');
       if (prev) prev.classList.remove('is-last');
@@ -924,6 +1053,8 @@ class SubForgeMobileStudio {
       this.dom.btnTopPlay.classList.remove('is-playing');
       this.dom.topPlayIcon.textContent = '▶';
       this.dom.seqSheetPlay.textContent = '▶ PLAY';
+      if (this.dom.zenPlayBtn) this.dom.zenPlayBtn.classList.remove('is-playing');
+      if (this.dom.zenPlayIcon) this.dom.zenPlayIcon.textContent = '▶';
       this.highlightPlayhead(-1);
       return;
     }
@@ -935,6 +1066,8 @@ class SubForgeMobileStudio {
     this.dom.btnTopPlay.classList.add('is-playing');
     this.dom.topPlayIcon.textContent = '■';
     this.dom.seqSheetPlay.textContent = '■ STOP';
+    if (this.dom.zenPlayBtn) this.dom.zenPlayBtn.classList.add('is-playing');
+    if (this.dom.zenPlayIcon) this.dom.zenPlayIcon.textContent = '■';
 
     this.seqTimerId = setInterval(() => {
       while (this.nextNoteTime < ctx.currentTime + 0.11) {
@@ -1199,73 +1332,80 @@ class SubForgeMobileStudio {
       const inst = this.state.selectedInstrument;
       const accent = inst.accentColorHex || '#38BDF8';
 
-      // 1. Live Oscilloscope + XY Reticle
-      const sw = this.dom.xyCanvas.width;
-      const sh = this.dom.xyCanvas.height;
-      const mid = sh / 2;
-      scopeCtx.fillStyle = '#090A0D';
-      scopeCtx.fillRect(0, 0, sw, sh);
-
-      scopeCtx.strokeStyle = 'rgba(255,255,255,0.06)';
-      scopeCtx.lineWidth = 1;
-      scopeCtx.beginPath();
-      scopeCtx.moveTo(0, mid);
-      scopeCtx.lineTo(sw, mid);
-      scopeCtx.stroke();
-
+      // 0. Refresh live audio analyser frame & render Flagship Liquid-Metal Morph Grid
       const samples = this.engine.readOscilloscope();
-      let hasLive = false;
-      if (samples) {
-        for (let i = 0; i < samples.length; i += 4) {
-          if (Math.abs(samples[i]) > 0.004) { hasLive = true; break; }
-        }
+      if (this.state.playSurface === 'morph' && this.morphGrid) {
+        this.morphGrid.render(now);
       }
 
-      scopeCtx.strokeStyle = accent;
-      scopeCtx.lineWidth = hasLive ? 2.2 : 1.5;
-      scopeCtx.globalAlpha = hasLive ? 1 : 0.48;
-      scopeCtx.beginPath();
-      if (hasLive) {
-        for (let i = 0; i < samples.length; i++) {
-          const x = (i / (samples.length - 1)) * sw;
-          const y = mid - samples[i] * (mid * 0.85);
-          if (i === 0) scopeCtx.moveTo(x, y); else scopeCtx.lineTo(x, y);
-        }
-      } else {
-        const wf = inst.waveform;
-        const dr = 1 + (inst.drive || 0.3) * 3.0;
-        const smx = inst.subOctaveMix || 0.6;
-        const scr = now * 0.0014;
-        for (let i = 0; i < 120; i++) {
-          const x = (i / 119) * sw;
-          const p = (i / 119) * 3 + scr;
-          const fr = p - Math.floor(p);
-          let v = Math.sin(p * Math.PI * 2);
-          if (wf === 'SAW') v = 2 * fr - 1;
-          else if (wf === 'SQUARE') v = Math.sin(p * Math.PI * 2) >= 0 ? 0.85 : -0.85;
-          else if (wf === 'TRIANGLE') v = 2 * Math.abs(2 * fr - 1) - 1;
-          else if (wf === 'SUB_PULSE') v = (fr < 0.38 ? 0.8 : -0.8) * 0.6 + Math.sin(p * Math.PI * 2) * 0.4;
-          else if (wf === 'FM_GROWL') v = Math.sin(p * Math.PI * 2 + Math.sin(p * Math.PI * 4) * (1.8 + inst.drive * 2.4));
-          const y = mid - Math.tanh((v * (1 - smx * 0.35) + Math.sin(p * Math.PI) * smx * 0.55) * dr * 0.65) * (mid * 0.48);
-          if (i === 0) scopeCtx.moveTo(x, y); else scopeCtx.lineTo(x, y);
-        }
-      }
-      scopeCtx.stroke();
-      scopeCtx.globalAlpha = 1;
+      // 1. Live Oscilloscope + XY Reticle (skip redundant off-screen draw in Zen mode)
+      if (!this.state.isZenFullscreen) {
+        const sw = this.dom.xyCanvas.width;
+        const sh = this.dom.xyCanvas.height;
+        const mid = sh / 2;
+        scopeCtx.fillStyle = '#090A0D';
+        scopeCtx.fillRect(0, 0, sw, sh);
 
-      if (this.state.xyDragging || this.state.xyHold) {
-        const rx = this.state.xyX * sw;
-        const ry = (1 - this.state.xyY) * sh;
-        scopeCtx.strokeStyle = 'rgba(245, 166, 35, 0.45)';
+        scopeCtx.strokeStyle = 'rgba(255,255,255,0.06)';
         scopeCtx.lineWidth = 1;
         scopeCtx.beginPath();
-        scopeCtx.moveTo(rx, 0); scopeCtx.lineTo(rx, sh);
-        scopeCtx.moveTo(0, ry); scopeCtx.lineTo(sw, ry);
+        scopeCtx.moveTo(0, mid);
+        scopeCtx.lineTo(sw, mid);
         scopeCtx.stroke();
-        scopeCtx.fillStyle = '#F5A623';
+
+        let hasLive = false;
+        if (samples) {
+          for (let i = 0; i < samples.length; i += 4) {
+            if (Math.abs(samples[i]) > 0.004) { hasLive = true; break; }
+          }
+        }
+
+        scopeCtx.strokeStyle = accent;
+        scopeCtx.lineWidth = hasLive ? 2.2 : 1.5;
+        scopeCtx.globalAlpha = hasLive ? 1 : 0.48;
         scopeCtx.beginPath();
-        scopeCtx.arc(rx, ry, 5, 0, Math.PI * 2);
-        scopeCtx.fill();
+        if (hasLive) {
+          for (let i = 0; i < samples.length; i++) {
+            const x = (i / (samples.length - 1)) * sw;
+            const y = mid - samples[i] * (mid * 0.85);
+            if (i === 0) scopeCtx.moveTo(x, y); else scopeCtx.lineTo(x, y);
+          }
+        } else {
+          const wf = inst.waveform;
+          const dr = 1 + (inst.drive || 0.3) * 3.0;
+          const smx = inst.subOctaveMix || 0.6;
+          const scr = now * 0.0014;
+          for (let i = 0; i < 120; i++) {
+            const x = (i / 119) * sw;
+            const p = (i / 119) * 3 + scr;
+            const fr = p - Math.floor(p);
+            let v = Math.sin(p * Math.PI * 2);
+            if (wf === 'SAW') v = 2 * fr - 1;
+            else if (wf === 'SQUARE') v = Math.sin(p * Math.PI * 2) >= 0 ? 0.85 : -0.85;
+            else if (wf === 'TRIANGLE') v = 2 * Math.abs(2 * fr - 1) - 1;
+            else if (wf === 'SUB_PULSE') v = (fr < 0.38 ? 0.8 : -0.8) * 0.6 + Math.sin(p * Math.PI * 2) * 0.4;
+            else if (wf === 'FM_GROWL') v = Math.sin(p * Math.PI * 2 + Math.sin(p * Math.PI * 4) * (1.8 + inst.drive * 2.4));
+            const y = mid - Math.tanh((v * (1 - smx * 0.35) + Math.sin(p * Math.PI) * smx * 0.55) * dr * 0.65) * (mid * 0.48);
+            if (i === 0) scopeCtx.moveTo(x, y); else scopeCtx.lineTo(x, y);
+          }
+        }
+        scopeCtx.stroke();
+        scopeCtx.globalAlpha = 1;
+
+        if (this.state.xyDragging || this.state.xyHold) {
+          const rx = this.state.xyX * sw;
+          const ry = (1 - this.state.xyY) * sh;
+          scopeCtx.strokeStyle = 'rgba(245, 166, 35, 0.45)';
+          scopeCtx.lineWidth = 1;
+          scopeCtx.beginPath();
+          scopeCtx.moveTo(rx, 0); scopeCtx.lineTo(rx, sh);
+          scopeCtx.moveTo(0, ry); scopeCtx.lineTo(sw, ry);
+          scopeCtx.stroke();
+          scopeCtx.fillStyle = '#F5A623';
+          scopeCtx.beginPath();
+          scopeCtx.arc(rx, ry, 5, 0, Math.PI * 2);
+          scopeCtx.fill();
+        }
       }
 
       // 2. Per-Pad Hit Animations

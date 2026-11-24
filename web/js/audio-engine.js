@@ -43,8 +43,9 @@ export class WebBassAudioEngine {
     this.activePadSources = new Array(12).fill(null);
     this.scopeData = new Float32Array(256);
 
-    // Continuous Fretless Glide voice nodes
+    // Continuous Fretless Glide & Multi-Touch Liquid Morph voices
     this.glideVoice = null;
+    this.liquidVoices = new Map();
 
     // Optional WebMIDI access
     this.midiOutputs = [];
@@ -429,6 +430,172 @@ export class WebBassAudioEngine {
     } catch (_) {}
   }
 
+  /**
+   * Multi-Touch Liquid Morph Voice:
+   * Spins up smoothly behind a pad tap so swiping or stretching melts into
+   * continuous portamento pitch glide, live filter/drive/wobble bend, and elastic snap-back.
+   */
+  startLiquidVoice(pointerId, freqHz, { initialGain = 0.0001, cutoffNorm = 0.45, stretchNorm = 0 } = {}) {
+    const ctx = this.ensureContext();
+    this.stopLiquidVoice(pointerId, false);
+
+    const inst = this.currentInstrument || {
+      waveform: 'SAW',
+      subOctaveMix: 0.72,
+      cutoffHz: 900,
+      resonance: 0.45,
+      drive: 0.45,
+      lfoRateHz: 2.5,
+      lfoDepth: 0.25,
+    };
+
+    const wfMap = {
+      SINE: 'sine',
+      SAW: 'sawtooth',
+      SQUARE: 'square',
+      TRIANGLE: 'triangle',
+      SUB_PULSE: 'square',
+      FM_GROWL: 'sawtooth',
+    };
+
+    const now = ctx.currentTime;
+    const safeF = Math.max(26, Math.min(880, freqHz));
+
+    const osc = ctx.createOscillator();
+    osc.type = wfMap[inst.waveform] || 'sawtooth';
+    osc.frequency.setValueAtTime(safeF, now);
+
+    const oscDetune = ctx.createOscillator();
+    oscDetune.type = wfMap[inst.waveform] || 'sawtooth';
+    oscDetune.frequency.setValueAtTime(safeF * 1.008, now);
+
+    const subOsc = ctx.createOscillator();
+    subOsc.type = 'sine';
+    subOsc.frequency.setValueAtTime(safeF * 0.5, now);
+
+    const mainGain = ctx.createGain();
+    mainGain.gain.value = 0.48;
+
+    const subGain = ctx.createGain();
+    subGain.gain.value = Math.max(0.24, (inst.subOctaveMix ?? 0.7) * 0.78);
+
+    const shaper = ctx.createWaveShaper();
+    shaper.curve = makeDistortionCurve(0.18 + (inst.drive || 0.35) * 0.55 + stretchNorm * 0.45);
+    shaper.oversample = '2x';
+
+    const filter = ctx.createBiquadFilter();
+    filter.type = 'lowpass';
+    const baseCut = Math.max(110, Math.min(6200, (inst.cutoffHz || 850) * (0.55 + cutoffNorm * 1.65)));
+    filter.frequency.setValueAtTime(baseCut, now);
+    filter.Q.setValueAtTime(1.0 + (inst.resonance || 0.35) * 8.5 + stretchNorm * 7.5, now);
+
+    const lfo = ctx.createOscillator();
+    lfo.frequency.setValueAtTime(Math.max(0.5, (inst.lfoRateHz || 2.2) + stretchNorm * 7.5), now);
+
+    const lfoGain = ctx.createGain();
+    lfoGain.gain.setValueAtTime(baseCut * ((inst.lfoDepth || 0.15) * 0.35 + stretchNorm * 0.52), now);
+    lfo.connect(lfoGain);
+    lfoGain.connect(filter.frequency);
+
+    const envGain = ctx.createGain();
+    envGain.gain.setValueAtTime(Math.max(0.0001, initialGain), now);
+
+    osc.connect(mainGain);
+    oscDetune.connect(mainGain);
+    subOsc.connect(subGain);
+    mainGain.connect(shaper);
+    subGain.connect(shaper);
+    shaper.connect(filter);
+    filter.connect(envGain);
+    envGain.connect(this.masterGain);
+
+    osc.start(now);
+    oscDetune.start(now);
+    subOsc.start(now);
+    lfo.start(now);
+
+    this.liquidVoices.set(pointerId, {
+      osc,
+      oscDetune,
+      subOsc,
+      lfo,
+      lfoGain,
+      shaper,
+      filter,
+      envGain,
+      inst,
+      lastDriveQuant: -1,
+    });
+  }
+
+  updateLiquidVoice(pointerId, freqHz, { level = 0.68, stretchNorm = 0, cutoffNorm = 0.5, glideTau = 0.022 } = {}) {
+    const v = this.liquidVoices.get(pointerId);
+    if (!v || !this.ctx) return;
+
+    const now = this.ctx.currentTime;
+    const safeF = Math.max(24, Math.min(920, freqHz));
+    const st = Math.max(0, Math.min(1, stretchNorm));
+    const cn = Math.max(0, Math.min(1, cutoffNorm));
+
+    v.osc.frequency.setTargetAtTime(safeF, now, glideTau);
+    v.oscDetune.frequency.setTargetAtTime(safeF * (1.007 + st * 0.012), now, glideTau);
+    v.subOsc.frequency.setTargetAtTime(safeF * 0.5, now, glideTau);
+
+    const baseCut = 110 * Math.pow(52, Math.max(0.06, Math.min(1, 0.25 + cn * 0.55 + st * 0.32)));
+    v.filter.frequency.setTargetAtTime(baseCut, now, 0.02);
+    v.filter.Q.setTargetAtTime(1.1 + (v.inst.resonance || 0.35) * 7.5 + st * 9.5, now, 0.022);
+
+    // Pull/stretch cranks live wobble speed + depth + saturation grit
+    const wobbleRate = Math.max(0.6, (v.inst.lfoRateHz || 2.0) + st * 9.5);
+    v.lfo.frequency.setTargetAtTime(wobbleRate, now, 0.03);
+    v.lfoGain.gain.setTargetAtTime(baseCut * ((v.inst.lfoDepth || 0.12) * 0.28 + st * 0.58), now, 0.025);
+
+    const driveQuant = Math.round((0.18 + (v.inst.drive || 0.35) * 0.5 + st * 0.52) * 20);
+    if (driveQuant !== v.lastDriveQuant) {
+      v.lastDriveQuant = driveQuant;
+      v.shaper.curve = makeDistortionCurve(driveQuant / 20);
+    }
+
+    const safeLevel = Math.max(0.0001, Math.min(0.86, level));
+    v.envGain.gain.setTargetAtTime(safeLevel, now, 0.024);
+  }
+
+  stopLiquidVoice(pointerId, snapDrop = false) {
+    const v = this.liquidVoices.get(pointerId);
+    if (!v || !this.ctx) return;
+    this.liquidVoices.delete(pointerId);
+
+    const now = this.ctx.currentTime;
+    try {
+      v.envGain.gain.cancelScheduledValues(now);
+      if (snapDrop) {
+        // Elastic sub-recoil pitch dip on high-stretch release!
+        const curF = v.osc.frequency.value || 55;
+        v.osc.frequency.setTargetAtTime(Math.max(26, curF * 0.52), now, 0.032);
+        v.oscDetune.frequency.setTargetAtTime(Math.max(26, curF * 0.525), now, 0.032);
+        v.subOsc.frequency.setTargetAtTime(Math.max(18, curF * 0.26), now, 0.032);
+        v.filter.frequency.setTargetAtTime(140, now, 0.045);
+        v.envGain.gain.setTargetAtTime(0.0001, now, 0.062);
+      } else {
+        v.envGain.gain.setTargetAtTime(0.0001, now, 0.034);
+      }
+      setTimeout(() => {
+        try {
+          v.osc.stop();
+          v.oscDetune.stop();
+          v.subOsc.stop();
+          v.lfo.stop();
+        } catch (_) {}
+      }, snapDrop ? 280 : 160);
+    } catch (_) {}
+  }
+
+  stopAllLiquidVoices() {
+    for (const pid of Array.from(this.liquidVoices.keys())) {
+      this.stopLiquidVoice(pid, false);
+    }
+  }
+
   auditionInstrumentRiff(instrument) {
     const ctx = this.ensureContext();
     const pads = generate12NotePads(instrument, 0);
@@ -465,6 +632,19 @@ export class WebBassAudioEngine {
     if (!this.analyser) return null;
     this.analyser.getFloatTimeDomainData(this.scopeData);
     return this.scopeData;
+  }
+
+  getBassAmplitude() {
+    if (!this.analyser || !this.scopeData) return 0;
+    let sumSq = 0;
+    const step = 4;
+    let count = 0;
+    for (let i = 0; i < this.scopeData.length; i += step) {
+      const s = this.scopeData[i];
+      sumSq += s * s;
+      count++;
+    }
+    return Math.min(1, Math.sqrt(sumSq / Math.max(1, count)) * 2.4);
   }
 
   async initWebMidi() {

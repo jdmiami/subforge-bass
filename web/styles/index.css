@@ -466,6 +466,32 @@ textarea:focus-visible {
   flex-direction: column;
 }
 
+/* Flagship: Liquid-Metal Morph Grid Surface */
+.morph-surface {
+  position: relative;
+  flex: 1;
+  min-height: 0;
+  border-radius: 14px;
+  background: #07080B;
+  border: 1px solid var(--border-hairline);
+  box-shadow: var(--bevel-well);
+  overflow: hidden;
+  touch-action: none;
+  cursor: pointer;
+  display: flex;
+}
+
+.morph-surface.is-hidden {
+  display: none;
+}
+
+.morph-canvas {
+  width: 100%;
+  height: 100%;
+  display: block;
+  touch-action: none;
+}
+
 /* 3x4 Giant Vertical Thumb Pad Matrix */
 .vertical-pad-grid {
   flex: 1;
@@ -695,51 +721,161 @@ textarea:focus-visible {
 }
 
 /* ==========================================================================
-   FULL-SCREEN ZEN PERFORMANCE MODE (100% SCREEN = PURE INSTRUMENT!)
+   FULL-SCREEN ZEN PERFORMANCE MODE (100% EDGE-TO-EDGE INSTRUMENT + GAME HUD)
    ========================================================================== */
 
 .handheld-stage.is-zen .top-console,
+.handheld-stage.is-zen .scope-ribbon-zone,
 .handheld-stage.is-zen .micro-control-strip,
 .handheld-stage.is-zen .bottom-dock {
   display: none;
 }
 
-.handheld-stage.is-zen .scope-ribbon-zone {
-  padding: 6px 8px 2px;
-}
-
-.handheld-stage.is-zen .xy-scope-deck {
-  height: 68px;
-}
-
 .handheld-stage.is-zen .play-stage {
-  padding: 4px 8px 8px;
+  padding: 0;
 }
 
-.zen-exit-pill {
+.handheld-stage.is-zen .morph-surface,
+.handheld-stage.is-zen .glide-surface,
+.handheld-stage.is-zen .vertical-pad-grid {
+  border-radius: 0;
+  border: none;
+  box-shadow: none;
+}
+
+.handheld-stage.is-zen .vertical-pad-grid {
+  padding-top: calc(58px + var(--safe-top));
+}
+
+.handheld-stage.is-zen .glide-hud {
+  top: calc(60px + var(--safe-top));
+}
+
+/* Floating Minimal Game HUD Pill (Auto-dims while playing) */
+.zen-hud-pill {
   position: absolute;
   top: calc(10px + var(--safe-top));
-  right: 12px;
+  left: 10px;
+  right: 10px;
   z-index: 35;
   display: none;
   align-items: center;
   gap: 6px;
-  height: 30px;
-  padding: 0 11px;
+  height: 42px;
+  padding: 0 6px 0 10px;
   border-radius: 999px;
-  background: hsla(220, 12%, 10%, 0.9);
-  border: 1px solid var(--border-strong);
-  backdrop-filter: blur(8px);
+  background: hsla(220, 14%, 8%, 0.78);
+  border: 1px solid hsla(0, 0%, 100%, 0.12);
+  backdrop-filter: blur(14px);
+  -webkit-backdrop-filter: blur(14px);
+  box-shadow: 0 8px 26px hsla(0, 0%, 0%, 0.55), inset 0 1px 0 hsla(0, 0%, 100%, 0.08);
+  transition: opacity 220ms ease, transform 220ms var(--ease-snap);
+}
+
+.handheld-stage.is-zen .zen-hud-pill {
+  display: flex;
+}
+
+.zen-hud-pill.is-dimmed {
+  opacity: 0.2;
+  transform: translateY(-2px) scale(0.985);
+  pointer-events: none;
+}
+
+.zen-patch-btn {
+  flex: 1;
+  min-width: 0;
+  height: 34px;
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  text-align: left;
+  touch-action: pan-y;
+}
+
+.zen-patch-text {
+  min-width: 0;
+  display: flex;
+  flex-direction: column;
+}
+
+.zen-patch-name {
+  font-family: var(--font-display);
+  font-size: 12.5px;
+  font-weight: 700;
+  letter-spacing: -0.015em;
+  color: var(--text-primary);
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  line-height: 1.1;
+}
+
+.zen-patch-meta {
+  font-family: var(--font-mono);
+  font-size: 9px;
+  letter-spacing: 0.04em;
+  color: var(--text-muted);
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.zen-hud-divider {
+  width: 1px;
+  height: 20px;
+  background: hsla(0, 0%, 100%, 0.1);
+  flex-shrink: 0;
+}
+
+.zen-chip-btn {
+  height: 28px;
+  padding: 0 10px;
+  border-radius: 999px;
+  background: hsla(0, 0%, 100%, 0.07);
+  border: 1px solid hsla(0, 0%, 100%, 0.11);
   font-family: var(--font-mono);
   font-size: 10px;
   font-weight: 700;
-  letter-spacing: 0.05em;
-  color: var(--text-primary);
-  box-shadow: 0 4px 14px hsla(0, 0%, 0%, 0.6);
+  letter-spacing: 0.06em;
+  color: var(--accent-amber);
+  flex-shrink: 0;
+  transition: background 100ms, transform 80ms;
 }
 
-.handheld-stage.is-zen .zen-exit-pill {
-  display: inline-flex;
+.zen-chip-btn:active {
+  transform: scale(0.94);
+  background: hsla(0, 0%, 100%, 0.14);
+}
+
+.zen-icon-btn {
+  width: 30px;
+  height: 30px;
+  border-radius: 50%;
+  display: grid;
+  place-items: center;
+  background: hsla(0, 0%, 100%, 0.06);
+  border: 1px solid hsla(0, 0%, 100%, 0.09);
+  font-family: var(--font-mono);
+  font-size: 11px;
+  font-weight: 700;
+  color: var(--text-primary);
+  flex-shrink: 0;
+  transition: background 100ms, transform 80ms, color 100ms;
+}
+
+.zen-icon-btn:active {
+  transform: scale(0.92);
+}
+
+.zen-icon-btn.is-playing {
+  background: var(--accent-primary);
+  border-color: hsla(12, 95%, 72%, 0.5);
+  color: #fff;
+}
+
+.zen-close-btn {
+  color: var(--text-secondary);
 }
 
 /* Floating Toast inside Handheld */
