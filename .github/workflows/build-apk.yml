@@ -6,7 +6,7 @@ on:
     branches: [main]
 
 permissions:
-  contents: read
+  contents: write
 
 jobs:
   build:
@@ -53,3 +53,15 @@ jobs:
           path: app/build/outputs/apk/debug/*.apk
           if-no-files-found: error
           retention-days: 30
+      - name: Prepare release asset
+        run: cp "$(ls app/build/outputs/apk/debug/*.apk | head -n1)" SubForge-Bass.apk
+      - name: Publish GitHub Release
+        uses: softprops/action-gh-release@v2
+        with:
+          tag_name: build-${{ github.run_number }}
+          name: SubForge Bass build ${{ github.run_number }}
+          body: Debug APK built from ${{ github.sha }}.
+          target_commitish: ${{ github.sha }}
+          make_latest: true
+          files: SubForge-Bass.apk
+          fail_on_unmatched_files: true
