@@ -1,0 +1,174 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>SubForge Bass</title>
+<meta name="description" content="Low-latency AI bass drum pad studio for Android. 12 original synth instruments, Gemini-powered instrument forging, cloud MIDI sequencer and community sharing.">
+<meta name="theme-color" content="#07070c">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Space+Grotesk:wght@400;600;700&family=JetBrains+Mono:wght@400;600&display=swap" rel="stylesheet">
+<style>
+  :root {
+    --bg: #07070c; --surface: #11111a; --line: #22222f;
+    --text: #ecedf3; --muted: #9a9cad;
+    --cyan: #22e4ff; --acid: #b6ff2e; --magenta: #ff2e9a;
+  }
+  * { box-sizing: border-box; margin: 0; }
+  body {
+    background: var(--bg); color: var(--text);
+    font: 16px/1.6 "Space Grotesk", system-ui, sans-serif;
+    -webkit-font-smoothing: antialiased; overflow-x: hidden;
+  }
+  .mono { font-family: "JetBrains Mono", ui-monospace, monospace; }
+  .wrap { max-width: 1080px; margin: 0 auto; padding: 0 16px; }
+  nav { display: flex; justify-content: space-between; align-items: center; padding: 20px 0; }
+  .logo { font-weight: 700; letter-spacing: .04em; }
+  .logo span { color: var(--cyan); }
+  nav a { color: var(--muted); text-decoration: none; font-size: 14px; }
+  nav a:hover { color: var(--text); }
+
+  .hero { padding: 72px 0 56px; display: grid; gap: 48px; grid-template-columns: 1.1fr 1fr; align-items: center; }
+  .tag { font-size: 12px; color: var(--acid); letter-spacing: .12em; text-transform: uppercase; }
+  h1 { font-size: clamp(40px, 7vw, 76px); line-height: 1; letter-spacing: -.03em; margin: 14px 0 20px; }
+  h1 em { font-style: normal; background: linear-gradient(90deg, var(--cyan), var(--magenta)); -webkit-background-clip: text; background-clip: text; color: transparent; }
+  .lede { color: var(--muted); font-size: 18px; max-width: 34ch; }
+  .cta { display: flex; gap: 12px; flex-wrap: wrap; margin-top: 32px; }
+  .btn { display: inline-flex; align-items: center; gap: 8px; padding: 14px 22px; border-radius: 10px; font-weight: 600; text-decoration: none; transition: transform .15s ease, box-shadow .15s ease; }
+  .btn-primary { background: var(--cyan); color: #04121a; box-shadow: 0 0 0 0 rgba(34,228,255,.5); }
+  .btn-primary:hover { transform: translateY(-1px); box-shadow: 0 8px 30px -8px rgba(34,228,255,.7); }
+  .btn-ghost { border: 1px solid var(--line); color: var(--text); }
+  .btn-ghost:hover { border-color: var(--muted); }
+  .note { margin-top: 14px; font-size: 13px; color: var(--muted); }
+
+  .pads { display: grid; grid-template-columns: repeat(4, 1fr); gap: 10px; padding: 18px; background: var(--surface); border: 1px solid var(--line); border-radius: 18px; }
+  .pad { aspect-ratio: 1; border-radius: 10px; border: 1px solid var(--line); background: #171723; cursor: pointer; position: relative; transition: background .12s, box-shadow .12s, transform .06s; }
+  .pad::after { content: attr(data-n); position: absolute; left: 8px; bottom: 6px; font: 10px "JetBrains Mono", monospace; color: var(--muted); }
+  .pad:active, .pad.hit { transform: scale(.96); }
+  .pad.hit { background: var(--c); box-shadow: 0 0 24px -2px var(--c); }
+  .pads-label { grid-column: 1 / -1; display: flex; justify-content: space-between; font-size: 11px; color: var(--muted); }
+
+  section { padding: 64px 0; border-top: 1px solid var(--line); }
+  h2 { font-size: 28px; letter-spacing: -.02em; margin-bottom: 28px; }
+  .grid { display: grid; grid-template-columns: repeat(3, 1fr); gap: 16px; }
+  .card { background: var(--surface); border: 1px solid var(--line); border-radius: 14px; padding: 22px; }
+  .card h3 { font-size: 17px; margin-bottom: 6px; }
+  .card p { color: var(--muted); font-size: 15px; }
+  .card .k { font-size: 11px; color: var(--cyan); letter-spacing: .1em; }
+
+  .instruments { display: flex; flex-wrap: wrap; gap: 8px; }
+  .chip { padding: 8px 14px; border: 1px solid var(--line); border-radius: 999px; font-size: 14px; color: var(--muted); }
+
+  ol.steps { list-style: none; padding: 0; counter-reset: s; display: grid; gap: 12px; max-width: 640px; }
+  ol.steps li { counter-increment: s; display: flex; gap: 14px; color: var(--muted); }
+  ol.steps li::before { content: counter(s, decimal-leading-zero); font-family: "JetBrains Mono", monospace; color: var(--acid); }
+  ol.steps strong { color: var(--text); font-weight: 600; }
+
+  footer { padding: 32px 0 48px; border-top: 1px solid var(--line); color: var(--muted); font-size: 13px; display: flex; justify-content: space-between; gap: 16px; flex-wrap: wrap; }
+
+  @media (max-width: 820px) {
+    .hero { grid-template-columns: 1fr; padding-top: 40px; }
+    .grid { grid-template-columns: 1fr; }
+  }
+  @media (prefers-reduced-motion: reduce) { * { transition: none !important; } }
+</style>
+</head>
+<body>
+<div class="wrap">
+  <nav>
+    <div class="logo">SUB<span>FORGE</span> BASS</div>
+    <a href="https://github.com/jdmiami/subforge-bass">GitHub →</a>
+  </nav>
+
+  <header class="hero">
+    <div>
+      <div class="tag mono">Android · AI bass studio</div>
+      <h1>Forge bass that <em>hits the floor.</em></h1>
+      <p class="lede">A low-latency drum pad studio with 12 original synth basses, Gemini-powered instrument forging and a cloud MIDI sequencer.</p>
+      <div class="cta">
+        <a class="btn btn-primary" href="https://github.com/jdmiami/subforge-bass/releases/latest">↓ Download APK</a>
+        <a class="btn btn-ghost" href="#features">See features</a>
+      </div>
+      <p class="note mono">Android 7.0+ · sideload install</p>
+    </div>
+    <div class="pads" id="pads" aria-label="Demo pad grid. Tap to play.">
+      <div class="pads-label mono"><span>PAD BANK A</span><span>TAP TO PLAY</span></div>
+    </div>
+  </header>
+
+  <section id="features">
+    <h2>Built for low end</h2>
+    <div class="grid">
+      <div class="card"><div class="k mono">ENGINE</div><h3>Low-latency audio</h3><p>A native synth engine tuned for fast pad response, with filter cutoff and LFO wobble under your fingers.</p></div>
+      <div class="card"><div class="k mono">AI FORGE</div><h3>Describe a sound, get an instrument</h3><p>Type or speak a prompt. Gemini designs a custom bass patch and pad visual for you.</p></div>
+      <div class="card"><div class="k mono">SEQUENCER</div><h3>Cloud MIDI patterns</h3><p>Record, save and reload patterns from a cloud library that stays in sync across devices.</p></div>
+      <div class="card"><div class="k mono">ROUTING</div><h3>VST bridge &amp; MIDI out</h3><p>Send to your DAW over MIDI, or route audio to a Bluetooth speaker or the phone speaker.</p></div>
+      <div class="card"><div class="k mono">COMMUNITY</div><h3>Share your forges</h3><p>Publish instruments, like and comment on other producers' sounds.</p></div>
+      <div class="card"><div class="k mono">OFFLINE</div><h3>Works without a connection</h3><p>All 12 built-in instruments play offline. AI features take over again when you reconnect.</p></div>
+    </div>
+  </section>
+
+  <section>
+    <h2>Instruments</h2>
+    <div class="instruments">
+      <span class="chip">Detuned Reese Saw</span><span class="chip">FM Metallic Growl</span><span class="chip">Hollow Pulse Square</span>
+      <span class="chip">Acid Synth</span><span class="chip">Analog Synth</span><span class="chip">Funk Pluck</span>
+      <span class="chip">Liquid Bass</span><span class="chip">Cinema Sub</span><span class="chip">FM Dubstep</span>
+      <span class="chip">Cyber Laser Grid</span><span class="chip">Ferrofluid Ripple</span><span class="chip">Harmonic Tunnel</span>
+    </div>
+  </section>
+
+  <section>
+    <h2>Install</h2>
+    <ol class="steps">
+      <li><span><strong>Download the APK</strong> from the latest release on your Android phone.</span></li>
+      <li><span><strong>Allow installs</strong> from your browser or file manager when Android asks.</span></li>
+      <li><span><strong>Open SubForge Bass</strong>, plug in headphones and start forging.</span></li>
+    </ol>
+  </section>
+
+  <footer>
+    <span>© <span id="y"></span> SubForge Bass</span>
+    <span class="mono">Made with low end.</span>
+  </footer>
+</div>
+
+<script>
+  document.getElementById('y').textContent = new Date().getFullYear();
+  const colors = ['#22e4ff', '#b6ff2e', '#ff2e9a', '#8a5cff'];
+  const notes = [41.2, 43.65, 49, 55, 61.74, 65.41, 73.42, 82.41, 87.31, 98, 110, 123.47];
+  const padsEl = document.getElementById('pads');
+  let ctx;
+  function play(freq) {
+    try {
+      ctx = ctx || new (window.AudioContext || window.webkitAudioContext)();
+      const t = ctx.currentTime;
+      const osc = ctx.createOscillator(), sub = ctx.createOscillator();
+      const filter = ctx.createBiquadFilter(), gain = ctx.createGain();
+      osc.type = 'sawtooth'; osc.frequency.value = freq;
+      sub.type = 'sine'; sub.frequency.value = freq / 2;
+      filter.type = 'lowpass'; filter.Q.value = 8;
+      filter.frequency.setValueAtTime(1800, t);
+      filter.frequency.exponentialRampToValueAtTime(120, t + 0.5);
+      gain.gain.setValueAtTime(0.0001, t);
+      gain.gain.exponentialRampToValueAtTime(0.35, t + 0.01);
+      gain.gain.exponentialRampToValueAtTime(0.0001, t + 0.7);
+      osc.connect(filter); sub.connect(filter); filter.connect(gain); gain.connect(ctx.destination);
+      osc.start(t); sub.start(t); osc.stop(t + 0.75); sub.stop(t + 0.75);
+    } catch (e) { /* audio unavailable */ }
+  }
+  notes.forEach((f, i) => {
+    const b = document.createElement('button');
+    b.className = 'pad'; b.dataset.n = String(i + 1).padStart(2, '0');
+    b.style.setProperty('--c', colors[i % colors.length]);
+    b.setAttribute('aria-label', 'Pad ' + (i + 1));
+    b.addEventListener('pointerdown', () => {
+      play(f); b.classList.add('hit');
+      setTimeout(() => b.classList.remove('hit'), 180);
+    });
+    padsEl.appendChild(b);
+  });
+</script>
+</body>
+</html>
