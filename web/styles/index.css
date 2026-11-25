@@ -276,6 +276,22 @@ textarea:focus-visible {
   height: 17px;
 }
 
+/* Android APK download links */
+.apk-dl-btn {
+  color: var(--accent-emerald);
+  text-decoration: none;
+}
+
+.apk-dl-wide {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 100%;
+  margin-top: 8px;
+  text-decoration: none;
+  color: var(--accent-emerald);
+}
+
 /* ==========================================================================
    ZONE B: TOUCH-INTERACTIVE LIVE OSCILLOSCOPE + X/Y EXPRESSION RIBBON
    ========================================================================== */
