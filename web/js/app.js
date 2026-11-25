@@ -21,6 +21,7 @@ import {
 } from './presets.js';
 import { WebBassAudioEngine } from './audio-engine.js';
 import { LiquidMorphGrid } from './morph-grid.js';
+import { GestureModulatorDeck, GESTURE_GUIDE_ITEMS } from './gesture-modulator.js';
 import {
   synthesizeInstrumentSpec,
   VoicePromptController,
@@ -220,19 +221,34 @@ class SubForgeMobileStudio {
     this.cacheDom();
     this.morphGrid = new LiquidMorphGrid({
       canvas: this.dom.morphCanvas,
-      container: this.dom.morphSurface,
+      container: this.dom.morphGridWrap,
       engine: this.engine,
       getInstrument: () => this.state.selectedInstrument,
-      getPadNotes: () => this.getActivePadNotes(),
+      getOctaveShift: () => this.state.octaveShift,
       isZenMode: () => this.state.isZenFullscreen,
-      onTapNote: (padIdx, vel) => this.triggerPad(padIdx, vel, null, null, false),
-      onGlideNote: (padIdx, vel) => this.triggerPad(padIdx, vel * 0.62, null, null, false),
       onNoteReadout: (label) => {
         this.dom.xyHudTr.textContent = label;
         if (this.dom.zenPatchMeta) this.dom.zenPatchMeta.textContent = label;
       },
       onPlayActivity: (active) => this.setZenHudDimmed(active),
     });
+    this.modDeck = new GestureModulatorDeck({
+      canvas: this.dom.modCanvas,
+      container: this.dom.modPadWell,
+      engine: this.engine,
+      getInstrument: () => this.state.selectedInstrument,
+      getBpm: () => this.state.bpm,
+      onGestureStatus: (label, latched) => {
+        if (this.dom.modStatusLabel) this.dom.modStatusLabel.textContent = label;
+        if (this.dom.modLatchBtn) this.dom.modLatchBtn.classList.toggle('is-active', Boolean(latched));
+      },
+      onPlayActivity: (active) => this.setZenHudDimmed(active),
+    });
+    if (this.dom.modGuideGrid) {
+      this.dom.modGuideGrid.innerHTML = GESTURE_GUIDE_ITEMS.map(
+        (g) => `<div class="mod-guide-item"><span class="mod-guide-tag">${esc(g.tag)}</span><span class="mod-guide-fx">${esc(g.fx)}</span></div>`
+      ).join('');
+    }
     this.bindEvents();
     this.selectInstrument(this.state.selectedInstrument, false);
     this.setPlaySurface(this.state.playSurface);
@@ -288,9 +304,20 @@ class SubForgeMobileStudio {
       octValLabel: $('oct-val-label'),
       btnBtBoost: $('btn-bt-boost'),
 
-      // Play Surfaces
+      // Play Surfaces & Second-Hand Modulator Deck
       morphSurface: $('morph-surface'),
+      morphGridWrap: $('morph-grid-wrap'),
       morphCanvas: $('morph-canvas'),
+      modDeckWrap: $('mod-deck-wrap'),
+      modPadWell: $('mod-pad-well'),
+      modCanvas: $('mod-canvas'),
+      modStatusLabel: $('mod-status-label'),
+      modLatchBtn: $('mod-latch-btn'),
+      modResetBtn: $('mod-reset-btn'),
+      modGuideBtn: $('mod-guide-btn'),
+      modGuideOverlay: $('mod-guide-overlay'),
+      modGuideClose: $('mod-guide-close'),
+      modGuideGrid: $('mod-guide-grid'),
       padGrid: $('vertical-pad-grid'),
       glideSurface: $('glide-surface'),
       glideCanvas: $('glide-canvas'),
@@ -399,9 +426,28 @@ class SubForgeMobileStudio {
     // Floating Game HUD Pill: 1-tap cycle through play interfaces (MORPH -> 12-PAD -> GLIDE)
     this.dom.zenModeBtn.addEventListener('click', () => this.cyclePlaySurface(1));
 
-    // Keep Morph Grid sized cleanly when browser fullscreen changes
+    // Keep Infinite Morph Grid + Second-Hand Modulator Deck sized cleanly on fullscreen changes
     document.addEventListener('fullscreenchange', () => {
-      requestAnimationFrame(() => this.morphGrid?.resize());
+      requestAnimationFrame(() => {
+        this.morphGrid?.resize();
+        this.modDeck?.resize();
+      });
+    });
+
+    // Second-Hand Modulator Deck quick controls (Latch, Clear, 14-Gesture Guide)
+    this.dom.modLatchBtn?.addEventListener('click', () => {
+      this.modDeck?.toggleLatch();
+      this.dom.modLatchBtn.classList.toggle('is-active', Boolean(this.modDeck?.isLatched));
+    });
+    this.dom.modResetBtn?.addEventListener('click', () => {
+      this.modDeck?.resetAll(false);
+      this.dom.modLatchBtn?.classList.remove('is-active');
+    });
+    this.dom.modGuideBtn?.addEventListener('click', () => {
+      this.dom.modGuideOverlay?.classList.toggle('is-hidden');
+    });
+    this.dom.modGuideClose?.addEventListener('click', () => {
+      this.dom.modGuideOverlay?.classList.add('is-hidden');
     });
 
     // Surface switcher (MORPH vs 12-PAD vs FRETLESS GLIDE)
@@ -710,7 +756,10 @@ class SubForgeMobileStudio {
         document.exitFullscreen().catch(() => {});
       }
     }
-    requestAnimationFrame(() => this.morphGrid?.resize());
+    requestAnimationFrame(() => {
+      this.morphGrid?.resize();
+      this.modDeck?.resize();
+    });
   }
 
   setZenHudDimmed(active) {
@@ -759,7 +808,10 @@ class SubForgeMobileStudio {
     if (!isGlide) this.engine.stopGlideVoice();
     if (!isMorph) this.engine.stopAllLiquidVoices();
     if (isMorph) {
-      requestAnimationFrame(() => this.morphGrid?.resize());
+      requestAnimationFrame(() => {
+        this.morphGrid?.resize();
+        this.modDeck?.resize();
+      });
     }
   }
 
@@ -827,10 +879,11 @@ class SubForgeMobileStudio {
   }
 
   setOctaveShift(shift) {
-    this.state.octaveShift = Math.max(-1, Math.min(2, shift));
+    this.state.octaveShift = Math.max(-2, Math.min(5, shift));
     const label = this.state.octaveShift > 0 ? `+${this.state.octaveShift}` : String(this.state.octaveShift);
     this.dom.octValLabel.textContent = `OCT ${label}`;
     this.engine.loadInstrument(this.state.selectedInstrument, this.state.octaveShift);
+    this.morphGrid?.scrollToOctave(this.state.octaveShift);
     this.renderPadGrid();
     this.triggerPad(0, 0.88);
   }
@@ -1332,10 +1385,11 @@ class SubForgeMobileStudio {
       const inst = this.state.selectedInstrument;
       const accent = inst.accentColorHex || '#38BDF8';
 
-      // 0. Refresh live audio analyser frame & render Flagship Liquid-Metal Morph Grid
+      // 0. Refresh live audio analyser frame & render Infinite Morph Grid + Second-Hand Modulator Deck
       const samples = this.engine.readOscilloscope();
-      if (this.state.playSurface === 'morph' && this.morphGrid) {
-        this.morphGrid.render(now);
+      if (this.state.playSurface === 'morph') {
+        if (this.morphGrid) this.morphGrid.render(now);
+        if (this.modDeck) this.modDeck.render(now);
       }
 
       // 1. Live Oscilloscope + XY Reticle (skip redundant off-screen draw in Zen mode)

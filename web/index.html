@@ -111,9 +111,32 @@
 
       <!-- ZONE C: FULL-BLEED VERTICAL INSTRUMENT PLAY STAGE -->
       <main class="play-stage" aria-label="Full-Screen Playable Bass Surface">
-        <!-- Flagship: Liquid-Metal Morph Grid (Fluid Thumb-Swipe x Tactile Button Hybrid) -->
-        <div id="morph-surface" class="morph-surface" role="application" aria-label="Liquid-Metal Morph Grid playable bass field">
-          <canvas id="morph-canvas" class="morph-canvas"></canvas>
+        <!-- Flagship: Infinite Open-Octave Liquid-Metal Morph Grid + Second-Hand 14-Gesture Modulator Deck -->
+        <div id="morph-surface" class="morph-surface" role="application" aria-label="Infinite Liquid-Metal Morph Grid and Gesture Modulator">
+          <div id="morph-grid-wrap" class="morph-grid-wrap">
+            <canvas id="morph-canvas" class="morph-canvas"></canvas>
+          </div>
+
+          <div id="mod-deck-wrap" class="mod-deck-wrap" role="application" aria-label="Second-Hand Multi-Touch Gesture Modulator Deck">
+            <div class="mod-deck-bar">
+              <span id="mod-status-label" class="mod-status-label">2ND HAND MOD • TAP / SWIPE / 2F PINCH</span>
+              <div class="mod-deck-actions">
+                <button type="button" id="mod-latch-btn" class="mod-mini-btn" title="Hold / Latch current FX">LATCH</button>
+                <button type="button" id="mod-reset-btn" class="mod-mini-btn" title="Reset FX to clean">CLR</button>
+                <button type="button" id="mod-guide-btn" class="mod-mini-btn mod-guide-btn" title="Show all 14 gestures" aria-label="Show gesture guide">?</button>
+              </div>
+            </div>
+            <div id="mod-pad-well" class="mod-pad-well">
+              <canvas id="mod-canvas" class="mod-canvas"></canvas>
+              <div id="mod-guide-overlay" class="mod-guide-overlay is-hidden" role="dialog" aria-label="Second-Hand Gesture Cheat Sheet">
+                <div class="mod-guide-head">
+                  <span>14 SECOND-HAND FX GESTURES (SHIFT+DRAG / WHEEL = 2F ON DESKTOP)</span>
+                  <button type="button" id="mod-guide-close" class="mod-mini-btn">✕</button>
+                </div>
+                <div id="mod-guide-grid" class="mod-guide-grid"></div>
+              </div>
+            </div>
+          </div>
         </div>
 
         <!-- 3x4 Giant Vertical Silicone Drum Pads -->

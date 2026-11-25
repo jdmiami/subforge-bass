@@ -466,7 +466,7 @@ textarea:focus-visible {
   flex-direction: column;
 }
 
-/* Flagship: Liquid-Metal Morph Grid Surface */
+/* Flagship: Infinite Liquid-Metal Morph Grid + Second-Hand Gesture Modulator Deck */
 .morph-surface {
   position: relative;
   flex: 1;
@@ -477,12 +477,20 @@ textarea:focus-visible {
   box-shadow: var(--bevel-well);
   overflow: hidden;
   touch-action: none;
-  cursor: pointer;
   display: flex;
+  flex-direction: column;
 }
 
 .morph-surface.is-hidden {
   display: none;
+}
+
+.morph-grid-wrap {
+  position: relative;
+  flex: 1 1 auto;
+  min-height: 0;
+  overflow: hidden;
+  touch-action: none;
 }
 
 .morph-canvas {
@@ -490,6 +498,159 @@ textarea:focus-visible {
   height: 100%;
   display: block;
   touch-action: none;
+  cursor: pointer;
+}
+
+/* Second-Hand Multi-Touch 14-Gesture Modulator Deck */
+.mod-deck-wrap {
+  position: relative;
+  flex: 0 0 clamp(126px, 27%, 182px);
+  display: flex;
+  flex-direction: column;
+  background: #090B0F;
+  border-top: 1px solid hsla(0, 0%, 100%, 0.11);
+  box-shadow: inset 0 1px 0 hsla(0, 0%, 100%, 0.05);
+  touch-action: none;
+}
+
+.handheld-stage.is-zen .mod-deck-wrap {
+  flex: 0 0 clamp(148px, 27%, 220px);
+}
+
+.mod-deck-bar {
+  flex: 0 0 26px;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 6px;
+  padding: 0 8px;
+  background: linear-gradient(180deg, hsl(220, 11%, 11%) 0%, hsl(220, 12%, 8%) 100%);
+  border-bottom: 1px solid hsla(0, 0%, 100%, 0.06);
+}
+
+.mod-status-label {
+  flex: 1;
+  min-width: 0;
+  font-family: var(--font-mono);
+  font-size: 9px;
+  font-weight: 700;
+  letter-spacing: 0.05em;
+  color: var(--accent-amber);
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.mod-deck-actions {
+  display: flex;
+  align-items: center;
+  gap: 4px;
+  flex-shrink: 0;
+}
+
+.mod-mini-btn {
+  height: 19px;
+  padding: 0 6px;
+  border-radius: 4px;
+  background: hsla(0, 0%, 100%, 0.06);
+  border: 1px solid hsla(0, 0%, 100%, 0.1);
+  font-family: var(--font-mono);
+  font-size: 8.5px;
+  font-weight: 700;
+  letter-spacing: 0.05em;
+  color: var(--text-secondary);
+  transition: background 100ms, color 100ms, border-color 100ms;
+}
+
+.mod-mini-btn:active {
+  background: hsla(0, 0%, 100%, 0.15);
+}
+
+.mod-mini-btn.is-active {
+  background: var(--accent-amber);
+  border-color: var(--accent-amber);
+  color: #111;
+}
+
+.mod-pad-well {
+  position: relative;
+  flex: 1 1 auto;
+  min-height: 0;
+  overflow: hidden;
+  touch-action: none;
+}
+
+.mod-canvas {
+  width: 100%;
+  height: 100%;
+  display: block;
+  touch-action: none;
+  cursor: crosshair;
+}
+
+/* 14-Gesture Quick Cheat-Sheet Overlay inside Mod Deck */
+.mod-guide-overlay {
+  position: absolute;
+  inset: 0;
+  z-index: 12;
+  background: hsla(220, 16%, 6%, 0.94);
+  backdrop-filter: blur(10px);
+  -webkit-backdrop-filter: blur(10px);
+  padding: 6px 8px;
+  display: flex;
+  flex-direction: column;
+  gap: 5px;
+  overflow-y: auto;
+}
+
+.mod-guide-overlay.is-hidden {
+  display: none;
+}
+
+.mod-guide-head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  font-family: var(--font-mono);
+  font-size: 8.5px;
+  font-weight: 700;
+  letter-spacing: 0.05em;
+  color: var(--accent-amber);
+}
+
+.mod-guide-grid {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 4px 8px;
+}
+
+.mod-guide-item {
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: 4px;
+  font-size: 10px;
+  line-height: 1.25;
+  padding: 2px 4px;
+  border-radius: 4px;
+  background: hsla(0, 0%, 100%, 0.035);
+}
+
+.mod-guide-tag {
+  font-family: var(--font-mono);
+  font-size: 8.5px;
+  font-weight: 700;
+  color: var(--text-primary);
+  white-space: nowrap;
+}
+
+.mod-guide-fx {
+  font-size: 9.5px;
+  color: var(--text-secondary);
+  text-align: right;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
 }
 
 /* 3x4 Giant Vertical Thumb Pad Matrix */
