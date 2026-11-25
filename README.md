@@ -20,3 +20,16 @@ View your app in AI Studio: https://ai.studio/apps/a33d021b-3491-4019-b2a0-c4db6
 5. Remove this line from the app's `build.gradle.kts` file: `signingConfig = signingConfigs.getByName("debugConfig")`
 6. Run the app on an emulator or physical device
 7. If you have already published your app in AI Studio, please [request upload key reset](https://support.google.com/googleplay/android-developer/answer/9842756#zippy=%2Crequest-an-upload-key-reset) in Google Play Console.
+
+## Web App (`web/`)
+
+The redesigned 9:16 vertical full-screen Web Audio API version of SubForge Bass lives in [`web/`](web/).
+
+```bash
+cd web
+npx serve .
+# or
+python3 -m http.server 8080
+```
+
+See [`web/README.md`](web/README.md) for full details.
