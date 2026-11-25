@@ -1979,3 +1979,13 @@ textarea:focus-visible {
   border-color: hsla(0, 0%, 100%, 0.22);
 }
 
+.lm-apk-pill {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 100%;
+  margin-top: 8px;
+  text-decoration: none;
+  color: var(--accent-emerald);
+}
+
