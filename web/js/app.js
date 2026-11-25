@@ -223,6 +223,9 @@ class SubForgeMobileStudio {
   }
 
   init() {
+    if (window.SubForgeAndroid && typeof window.SubForgeAndroid.isAndroidApp === 'function' && window.SubForgeAndroid.isAndroidApp()) {
+      document.documentElement.classList.add('is-android-app');
+    }
     this.cacheDom();
     this.morphGrid = new LiquidMorphGrid({
       canvas: this.dom.morphCanvas,
