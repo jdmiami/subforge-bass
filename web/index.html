@@ -12,7 +12,103 @@
 </head>
 <body>
   <div class="viewport-frame">
-    <div id="handheld-stage" class="handheld-stage">
+    <div id="handheld-stage" class="handheld-stage is-zen">
+
+      <!-- ==================================================================
+           LIQUID-METAL GAME START & PAUSE MENU (LIVING FERROFLUID REACTOR)
+           ================================================================== -->
+      <section id="game-menu-screen" class="game-menu-screen is-open" aria-label="SubForge Bass Liquid-Metal Game Menu">
+        <canvas id="menu-reactor-canvas" class="menu-reactor-canvas"></canvas>
+
+        <div class="game-menu-content">
+          <!-- Title Header (floats cleanly above the living mercury orb) -->
+          <header class="game-menu-header">
+            <div class="game-menu-kicker">INFINITE OCTAVE • LIQUID SYNTH ENGINE</div>
+            <h1 class="game-menu-title">SUBFORGE <span>BASS</span></h1>
+          </header>
+
+          <!-- Interactive Mercury Orb Spacer (touching here pulls the living ferrofluid!) -->
+          <div class="game-menu-orb-spacer" aria-hidden="true"></div>
+
+          <!-- Lower Thumb-Zone Liquid-Metal Control Stack -->
+          <div class="game-menu-stack">
+            <!-- Swipeable Bass Loadout Card (like selecting your fighter/rig in a game) -->
+            <div id="menu-loadout-card" class="lm-loadout-card">
+              <div class="lm-loadout-top">
+                <button type="button" id="menu-prev-patch" class="lm-arrow-btn" aria-label="Previous Bass Loadout">◂</button>
+                <div id="menu-patch-center" class="lm-patch-center">
+                  <div class="lm-patch-title-row">
+                    <span id="menu-patch-led" class="patch-led-dot"></span>
+                    <span id="menu-patch-name" class="lm-patch-name">01. SubZero 808</span>
+                  </div>
+                  <span id="menu-patch-meta" class="lm-patch-meta">808 / SUB • SINE • 41.2Hz</span>
+                </div>
+                <button type="button" id="menu-audition-btn" class="lm-audition-btn" title="Audition Bass" aria-label="Audition Bass">▶</button>
+                <button type="button" id="menu-next-patch" class="lm-arrow-btn" aria-label="Next Bass Loadout">▸</button>
+              </div>
+
+              <div class="lm-stat-bars">
+                <div class="lm-stat-item">
+                  <span>SUB</span>
+                  <div class="lm-stat-track"><div id="menu-stat-sub" class="lm-stat-fill" style="width:90%"></div></div>
+                </div>
+                <div class="lm-stat-item">
+                  <span>GRIT</span>
+                  <div class="lm-stat-track"><div id="menu-stat-grit" class="lm-stat-fill" style="width:34%"></div></div>
+                </div>
+                <div class="lm-stat-item">
+                  <span>CUT</span>
+                  <div class="lm-stat-track"><div id="menu-stat-cut" class="lm-stat-fill" style="width:45%"></div></div>
+                </div>
+                <div class="lm-stat-item">
+                  <span>WOB</span>
+                  <div class="lm-stat-track"><div id="menu-stat-wob" class="lm-stat-fill" style="width:20%"></div></div>
+                </div>
+              </div>
+            </div>
+
+            <!-- Play Arena Mode Switcher -->
+            <div class="lm-mode-row" role="tablist" aria-label="Select Play Arena">
+              <button type="button" class="lm-mode-pill is-active" data-menu-surface="morph" role="tab" aria-selected="true">MORPH + MOD</button>
+              <button type="button" class="lm-mode-pill" data-menu-surface="pads" role="tab" aria-selected="false">12-PAD</button>
+              <button type="button" class="lm-mode-pill" data-menu-surface="glide" role="tab" aria-selected="false">GLIDE</button>
+            </div>
+
+            <!-- HERO LIQUID-METAL PLAY BUTTON -->
+            <button type="button" id="menu-play-btn" class="lm-hero-play-btn">
+              <span class="lm-hero-sheen" aria-hidden="true"></span>
+              <span class="lm-hero-icon">▶</span>
+              <span id="menu-play-label" class="lm-hero-text">PLAY INSTRUMENT</span>
+            </button>
+
+            <!-- 2x2 Sculpted Liquid-Metal Menu Cards -->
+            <div class="lm-menu-grid">
+              <button type="button" class="lm-tile-btn lm-tile-forge" data-menu-sheet="create">
+                <span class="lm-tile-kicker">AI + 2D DNA</span>
+                <span class="lm-tile-title">+ FORGE BASS</span>
+              </button>
+              <button type="button" class="lm-tile-btn" data-menu-sheet="sculpt">
+                <span class="lm-tile-kicker">DSP ENGINE</span>
+                <span class="lm-tile-title">SCULPT RACK</span>
+              </button>
+              <button type="button" class="lm-tile-btn" data-menu-sheet="seq">
+                <span class="lm-tile-kicker">16-STEP MIDI</span>
+                <span class="lm-tile-title">GROOVE LAB</span>
+              </button>
+              <button type="button" class="lm-tile-btn" data-menu-sheet="hub">
+                <span class="lm-tile-kicker">COMMUNITY</span>
+                <span class="lm-tile-title">BASS HUB</span>
+              </button>
+            </div>
+
+            <!-- Bottom Utility Links (Full Bank & Studio Rack Toggle) -->
+            <div class="lm-footer-row">
+              <button type="button" id="menu-bank-btn" class="lm-ghost-pill">INSTRUMENT BANK</button>
+              <button type="button" id="menu-studio-btn" class="lm-ghost-pill">STUDIO RACK VIEW</button>
+            </div>
+          </div>
+        </div>
+      </section>
 
       <!-- FLOATING MINIMAL GAME HUD PILL IN FULL-SCREEN MODE (AUTO-DIMS WHILE PLAYING) -->
       <div id="zen-hud-pill" class="zen-hud-pill" role="toolbar" aria-label="Full-Screen Performance HUD">
@@ -34,8 +130,8 @@
           <span id="zen-play-icon">▶</span>
         </button>
 
-        <button type="button" id="btn-exit-zen" class="zen-icon-btn zen-close-btn" aria-label="Exit Full-Screen Performance Mode" title="Exit Full-Screen">
-          ✕
+        <button type="button" id="btn-exit-zen" class="zen-icon-btn zen-menu-btn" aria-label="Open Game Menu" title="Open Game Menu">
+          ☰
         </button>
       </div>
 
@@ -85,6 +181,10 @@
               <line x1="21" y1="3" x2="14" y2="10" />
               <line x1="3" y1="21" x2="10" y2="14" />
             </svg>
+          </button>
+
+          <button type="button" id="btn-studio-menu" class="icon-square-btn" title="Open Liquid-Metal Game Menu" aria-label="Open Game Menu">
+            <span style="font-family:var(--font-mono);font-size:13px;font-weight:700;">☰</span>
           </button>
         </div>
       </header>

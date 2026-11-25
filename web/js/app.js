@@ -22,6 +22,7 @@ import {
 import { WebBassAudioEngine } from './audio-engine.js';
 import { LiquidMorphGrid } from './morph-grid.js';
 import { GestureModulatorDeck, GESTURE_GUIDE_ITEMS } from './gesture-modulator.js';
+import { LiquidMenuReactor } from './game-menu.js';
 import {
   synthesizeInstrumentSpec,
   VoicePromptController,
@@ -101,7 +102,9 @@ class SubForgeMobileStudio {
       lastTriggeredPad: 0,
       btSubBoost: true,
       playSurface: 'morph', // 'morph' | 'pads' | 'glide'
-      isZenFullscreen: false,
+      isZenFullscreen: true,
+      isGameMenuOpen: true,
+      hasEnteredStage: false,
       openSheet: null,
 
       // XY Oscilloscope Expression
@@ -145,6 +148,8 @@ class SubForgeMobileStudio {
     this.dnaLastAudition = 0;
     this.voiceController = null;
     this.morphGrid = null;
+    this.modDeck = null;
+    this.menuReactor = null;
     this.zenHudDimTimer = null;
 
     this.init();
@@ -244,6 +249,12 @@ class SubForgeMobileStudio {
       },
       onPlayActivity: (active) => this.setZenHudDimmed(active),
     });
+    this.menuReactor = new LiquidMenuReactor({
+      canvas: this.dom.menuReactorCanvas,
+      container: this.dom.gameMenuScreen,
+      engine: this.engine,
+      getInstrument: () => this.state.selectedInstrument,
+    });
     if (this.dom.modGuideGrid) {
       this.dom.modGuideGrid.innerHTML = GESTURE_GUIDE_ITEMS.map(
         (g) => `<div class="mod-guide-item"><span class="mod-guide-tag">${esc(g.tag)}</span><span class="mod-guide-fx">${esc(g.fx)}</span></div>`
@@ -266,6 +277,29 @@ class SubForgeMobileStudio {
       stage: $('handheld-stage'),
       btnExitZen: $('btn-exit-zen'),
       btnEnterZen: $('btn-enter-zen'),
+      btnStudioMenu: $('btn-studio-menu'),
+
+      // Liquid-Metal Game Start / Pause Menu
+      gameMenuScreen: $('game-menu-screen'),
+      menuReactorCanvas: $('menu-reactor-canvas'),
+      menuLoadoutCard: $('menu-loadout-card'),
+      menuPrevPatch: $('menu-prev-patch'),
+      menuNextPatch: $('menu-next-patch'),
+      menuAuditionBtn: $('menu-audition-btn'),
+      menuPatchLed: $('menu-patch-led'),
+      menuPatchName: $('menu-patch-name'),
+      menuPatchMeta: $('menu-patch-meta'),
+      menuStatSub: $('menu-stat-sub'),
+      menuStatGrit: $('menu-stat-grit'),
+      menuStatCut: $('menu-stat-cut'),
+      menuStatWob: $('menu-stat-wob'),
+      menuModePills: document.querySelectorAll('[data-menu-surface]'),
+      menuPlayBtn: $('menu-play-btn'),
+      menuPlayLabel: $('menu-play-label'),
+      menuSheetTiles: document.querySelectorAll('[data-menu-sheet]'),
+      menuBankBtn: $('menu-bank-btn'),
+      menuStudioBtn: $('menu-studio-btn'),
+
       zenHudPill: $('zen-hud-pill'),
       zenPatchBtn: $('zen-patch-btn'),
       zenPatchLed: $('zen-patch-led'),
@@ -397,13 +431,77 @@ class SubForgeMobileStudio {
       if (!swipeHandled) this.openSheet('bank');
     });
 
-    // Transport, Demo Riff & Full-Screen Zen Mode
+    // Transport, Demo Riff & Full-Screen / Game Menu
     this.dom.btnTopPlay.addEventListener('click', () => this.toggleSequencer());
     this.dom.seqSheetPlay.addEventListener('click', () => this.toggleSequencer());
     this.dom.zenPlayBtn.addEventListener('click', () => this.toggleSequencer());
     this.dom.btnTopRiff.addEventListener('click', () => this.playDemoRiff());
     this.dom.btnEnterZen.addEventListener('click', () => this.setZenFullscreen(true));
-    this.dom.btnExitZen.addEventListener('click', () => this.setZenFullscreen(false));
+    this.dom.btnExitZen.addEventListener('click', () => this.setGameMenuOpen(true));
+    this.dom.btnStudioMenu?.addEventListener('click', () => this.setGameMenuOpen(true));
+
+    // ================= LIQUID-METAL GAME MENU CONTROLS =================
+    this.dom.menuPlayBtn?.addEventListener('click', () => {
+      this.engine.ensureContext();
+      this.engine.triggerSubPunch(0.72);
+      this.state.hasEnteredStage = true;
+      if (this.dom.menuPlayLabel) this.dom.menuPlayLabel.textContent = 'RESUME INSTRUMENT';
+      this.setZenFullscreen(true, false);
+      this.setGameMenuOpen(false);
+    });
+
+    this.dom.menuPrevPatch?.addEventListener('click', () => {
+      this.cycleInstrument(-1);
+      this.menuReactor?.triggerPulse(1.0);
+    });
+    this.dom.menuNextPatch?.addEventListener('click', () => {
+      this.cycleInstrument(1);
+      this.menuReactor?.triggerPulse(1.0);
+    });
+    this.dom.menuAuditionBtn?.addEventListener('click', () => {
+      this.engine.auditionInstrumentRiff(this.state.selectedInstrument);
+      this.menuReactor?.triggerPulse(1.1);
+    });
+
+    // Swipe left/right on the Game Menu Loadout Card to cycle basses like a game character select!
+    let menuSwipeX = 0;
+    this.dom.menuLoadoutCard?.addEventListener('pointerdown', (e) => {
+      if (e.target.closest('button')) return;
+      menuSwipeX = e.clientX;
+    });
+    this.dom.menuLoadoutCard?.addEventListener('pointerup', (e) => {
+      if (e.target.closest('button')) return;
+      const dx = e.clientX - menuSwipeX;
+      if (Math.abs(dx) > 34) {
+        this.cycleInstrument(dx < 0 ? 1 : -1);
+        this.menuReactor?.triggerPulse(1.0);
+      }
+    });
+
+    // Play Arena selector pills on Game Menu
+    this.dom.menuModePills?.forEach((pill) => {
+      pill.addEventListener('click', () => {
+        const mode = pill.dataset.menuSurface;
+        this.setPlaySurface(mode);
+        this.menuReactor?.triggerPulse(0.7);
+      });
+    });
+
+    // 2x2 Liquid-Metal Menu Cards (FORGE, SCULPT, GROOVE, HUB) & Bank / Studio View
+    this.dom.menuSheetTiles?.forEach((tile) => {
+      tile.addEventListener('click', () => {
+        const sheet = tile.dataset.menuSheet;
+        if (sheet) this.openSheet(sheet);
+      });
+    });
+    this.dom.menuBankBtn?.addEventListener('click', () => this.openSheet('bank'));
+    this.dom.menuStudioBtn?.addEventListener('click', () => {
+      this.engine.ensureContext();
+      this.state.hasEnteredStage = true;
+      if (this.dom.menuPlayLabel) this.dom.menuPlayLabel.textContent = 'RESUME INSTRUMENT';
+      this.setZenFullscreen(false);
+      this.setGameMenuOpen(false);
+    });
 
     // Floating Minimal Game HUD Pill: Swipe left/right to hot-swap bass, tap to open Bank
     let zenSwipeX = 0;
@@ -667,7 +765,10 @@ class SubForgeMobileStudio {
       this.selectInstrument(created, true);
       this.renderBankSheet();
       this.closeAllSheets();
-      this.setZenFullscreen(true);
+      this.state.hasEnteredStage = true;
+      if (this.dom.menuPlayLabel) this.dom.menuPlayLabel.textContent = 'RESUME INSTRUMENT';
+      this.setZenFullscreen(true, false);
+      this.setGameMenuOpen(false);
       this.showToast(`"${created.name}" active in Full-Screen Performance Mode!`);
     });
 
@@ -721,7 +822,7 @@ class SubForgeMobileStudio {
       if (['INPUT', 'TEXTAREA'].includes((e.target && e.target.tagName) || '') || e.repeat) return;
       if (e.key === 'Escape') {
         if (this.state.openSheet) this.closeAllSheets();
-        else if (this.state.isZenFullscreen) this.setZenFullscreen(false);
+        else this.setGameMenuOpen(!this.state.isGameMenuOpen);
         return;
       }
       if (e.code === 'Space') {
@@ -738,16 +839,53 @@ class SubForgeMobileStudio {
   }
 
   /* ========================================================================
-     FULL-SCREEN ZEN MODE, PLAY SURFACES & SHEETS
+     LIQUID-METAL GAME MENU, FULL-SCREEN ZEN MODE, PLAY SURFACES & SHEETS
      ======================================================================== */
 
-  setZenFullscreen(enabled) {
+  setGameMenuOpen(open) {
+    this.state.isGameMenuOpen = Boolean(open);
+    this.dom.gameMenuScreen?.classList.toggle('is-open', this.state.isGameMenuOpen);
+    if (this.state.isGameMenuOpen) {
+      this.engine.stopAllLiquidVoices();
+      this.engine.stopGlideVoice();
+      this.updateMenuLoadout(this.state.selectedInstrument);
+      requestAnimationFrame(() => this.menuReactor?.resize());
+    } else {
+      requestAnimationFrame(() => {
+        this.morphGrid?.resize();
+        this.modDeck?.resize();
+      });
+    }
+  }
+
+  updateMenuLoadout(inst) {
+    if (!inst) return;
+    if (this.dom.menuPatchName) this.dom.menuPatchName.textContent = inst.name;
+    if (this.dom.menuPatchMeta) {
+      this.dom.menuPatchMeta.textContent = `${(inst.category || 'BASS').toUpperCase()} • ${inst.waveform} • ${Number(inst.baseFreqHz).toFixed(1)}Hz`;
+    }
+    if (this.dom.menuStatSub) this.dom.menuStatSub.style.width = `${Math.round((inst.subOctaveMix ?? 0.7) * 100)}%`;
+    if (this.dom.menuStatGrit) this.dom.menuStatGrit.style.width = `${Math.round((inst.drive ?? 0.35) * 100)}%`;
+    if (this.dom.menuStatCut) {
+      const cutPct = Math.max(8, Math.min(100, Math.round(((inst.cutoffHz || 800) / 3600) * 100)));
+      this.dom.menuStatCut.style.width = `${cutPct}%`;
+    }
+    if (this.dom.menuStatWob) {
+      const wobPct = Math.max(8, Math.min(100, Math.round((inst.lfoDepth ?? 0.2) * 100)));
+      this.dom.menuStatWob.style.width = `${wobPct}%`;
+    }
+    if (this.dom.menuBankBtn) {
+      this.dom.menuBankBtn.textContent = `INSTRUMENT BANK (${this.getAllInstruments().length})`;
+    }
+  }
+
+  setZenFullscreen(enabled, requestBrowserFs = true) {
     this.state.isZenFullscreen = Boolean(enabled);
     this.dom.stage.classList.toggle('is-zen', this.state.isZenFullscreen);
     if (this.state.isZenFullscreen) {
       this.closeAllSheets();
       this.setZenHudDimmed(false);
-      if (document.documentElement.requestFullscreen && !document.fullscreenElement) {
+      if (requestBrowserFs && document.documentElement.requestFullscreen && !document.fullscreenElement) {
         document.documentElement.requestFullscreen().catch(() => {});
       }
     } else {
@@ -795,6 +933,12 @@ class SubForgeMobileStudio {
     this.dom.modePadsBtn.setAttribute('aria-selected', String(isPads));
     this.dom.modeGlideBtn.classList.toggle('is-active', isGlide);
     this.dom.modeGlideBtn.setAttribute('aria-selected', String(isGlide));
+
+    this.dom.menuModePills?.forEach((pill) => {
+      const act = pill.dataset.menuSurface === valid;
+      pill.classList.toggle('is-active', act);
+      pill.setAttribute('aria-selected', String(act));
+    });
 
     this.dom.morphSurface.classList.toggle('is-hidden', !isMorph);
     this.dom.padGrid.classList.toggle('is-hidden', !isPads);
@@ -864,6 +1008,7 @@ class SubForgeMobileStudio {
     this.dom.topPatchName.textContent = inst.name;
     this.dom.topPatchSub.textContent = `${inst.waveform} • ${inst.baseFreqHz.toFixed(1)}Hz • SWIPE ⇄`;
     this.dom.xyHudBl.textContent = `CUT OPEN • DRV ${Math.round(inst.drive * 100)}%`;
+    this.updateMenuLoadout(inst);
 
     if (this.dom.zenPatchName) this.dom.zenPatchName.textContent = inst.name;
     if (this.dom.zenPatchMeta) {
@@ -944,7 +1089,9 @@ class SubForgeMobileStudio {
       if (this.dom.zenPatchMeta) this.dom.zenPatchMeta.textContent = noteText;
       this.padFx[idx] = { energy: 1, hitTime: performance.now() };
 
-      if (pulseMorph && this.state.playSurface === 'morph' && this.morphGrid) {
+      if (this.state.isGameMenuOpen && this.menuReactor) {
+        this.menuReactor.triggerPulse(velocity * 0.72);
+      } else if (pulseMorph && this.state.playSurface === 'morph' && this.morphGrid) {
         this.morphGrid.pulseCell(idx, velocity);
       }
 
@@ -1385,15 +1532,17 @@ class SubForgeMobileStudio {
       const inst = this.state.selectedInstrument;
       const accent = inst.accentColorHex || '#38BDF8';
 
-      // 0. Refresh live audio analyser frame & render Infinite Morph Grid + Second-Hand Modulator Deck
+      // 0. Refresh live audio analyser frame & render active Liquid-Metal Canvas
       const samples = this.engine.readOscilloscope();
-      if (this.state.playSurface === 'morph') {
+      if (this.state.isGameMenuOpen) {
+        if (this.menuReactor) this.menuReactor.render(now);
+      } else if (this.state.playSurface === 'morph') {
         if (this.morphGrid) this.morphGrid.render(now);
         if (this.modDeck) this.modDeck.render(now);
       }
 
-      // 1. Live Oscilloscope + XY Reticle (skip redundant off-screen draw in Zen mode)
-      if (!this.state.isZenFullscreen) {
+      // 1. Live Oscilloscope + XY Reticle (skip redundant off-screen draw in Zen mode or Game Menu)
+      if (!this.state.isZenFullscreen && !this.state.isGameMenuOpen) {
         const sw = this.dom.xyCanvas.width;
         const sh = this.dom.xyCanvas.height;
         const mid = sh / 2;
