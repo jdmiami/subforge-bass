@@ -139,6 +139,10 @@ export class GestureModulatorDeck {
 
   haptic(ms = 10) {
     try {
+      if (window.SubForgeAndroid && typeof window.SubForgeAndroid.vibrate === 'function') {
+        window.SubForgeAndroid.vibrate(ms);
+        return;
+      }
       if (navigator && typeof navigator.vibrate === 'function') navigator.vibrate(ms);
     } catch (_) {}
   }

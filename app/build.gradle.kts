@@ -18,10 +18,17 @@ android {
     applicationId = "com.aistudio.subforgebass.kxmpzq"
     minSdk = 24
     targetSdk = 36
-    versionCode = 1
-    versionName = "1.0"
+    versionCode = 2
+    versionName = "2.0"
 
     testInstrumentationRunner = "androidx.test.runner.AndroidJUnitRunner"
+  }
+
+  // Package the redesigned Liquid-Metal web app directly into the Android APK assets
+  sourceSets {
+    getByName("main") {
+      assets.srcDirs("src/main/assets", "${rootDir}/web")
+    }
   }
 
   // Do not remove or modify these signingConfigs. They are necessary for building, installing,

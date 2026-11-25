@@ -1989,3 +1989,11 @@ textarea:focus-visible {
   color: var(--accent-emerald);
 }
 
+/* Hide APK download links when already running inside the installed Android APK */
+.is-android-app .lm-apk-pill,
+.is-android-app .apk-dl-btn,
+.is-android-app .apk-dl-wide {
+  display: none !important;
+}
+
+
