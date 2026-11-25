@@ -1,14 +1,17 @@
 /**
- * SubForge Bass — Flagship Interface: Liquid-Metal Morph Grid
- * Fluid Thumb-Swipe × Tactile Button Hybrid Engine
+ * SubForge Bass — Flagship Interface: Infinite Open-Octave Liquid-Metal Morph Grid
+ * Fluid Thumb-Swipe × Tactile Button Hybrid Engine with Boundless Octave Scrolling
  *
- * Physics & Interaction:
- * - 12 chromatic ferrofluid cells (3x4, C bottom-left -> B top-right) on damped springs
- * - Tap: crisp button-like 808 transient + spring squash/rebound + ripple shockwave to neighbors
+ * Features:
+ * - Infinite open vertical 3-column chromatic ferrofluid lattice (seamless across unlimited octaves!)
+ * - Right-edge Infinite Octave Elevator Rail (drag or flick with inertia, plus mouse wheel)
+ * - Auto-Climb / Auto-Dive Edge Scroll while gliding so one uninterrupted swipe can cross 4+ octaves
+ * - Tap: crisp 808 transient + spring squash/rebound + pressure ripples to neighboring cells
  * - Swipe across cells: magnetic proximity swell + gooey metaball bridges + continuous portamento pitch glide
- * - Press & pull: taffy stretch cranks live Filter Cutoff, Resonance, Drive & Wobble LFO; snap-back sub-drop on release
- * - Multi-touch pointer support, bass-reactive micro screen-shake, live background oscilloscope, & mobile haptics
+ * - Press & pull: taffy stretch cranks Filter Cutoff, Resonance, Drive & Wobble LFO; snap-back sub-drop on release
  */
+
+const NOTE_NAMES = ['C', 'C#', 'D', 'D#', 'E', 'F', 'F#', 'G', 'G#', 'A', 'A#', 'B'];
 
 function clamp(v, min, max) {
   return v < min ? min : v > max ? max : v;
@@ -31,19 +34,14 @@ function rgba(rgb, a) {
   return `rgba(${rgb.r},${rgb.g},${rgb.b},${clamp(a, 0, 1).toFixed(3)})`;
 }
 
-// 3 columns x 4 rows: bottom row = C, C#, D (0,1,2) climbing up to A, A#, B (9,10,11)
-const VERTICAL_PAD_ORDER = [9, 10, 11, 6, 7, 8, 3, 4, 5, 0, 1, 2];
-
 export class LiquidMorphGrid {
   constructor({
     canvas,
     container,
     engine,
     getInstrument,
-    getPadNotes,
+    getOctaveShift,
     isZenMode,
-    onTapNote,
-    onGlideNote,
     onNoteReadout,
     onPlayActivity,
   }) {
@@ -52,57 +50,78 @@ export class LiquidMorphGrid {
     this.ctx = canvas.getContext('2d');
     this.engine = engine;
     this.getInstrument = getInstrument;
-    this.getPadNotes = getPadNotes;
+    this.getOctaveShift = getOctaveShift;
     this.isZenMode = isZenMode;
-    this.onTapNote = onTapNote;
-    this.onGlideNote = onGlideNote;
     this.onNoteReadout = onNoteReadout;
     this.onPlayActivity = onPlayActivity;
 
     this.width = 400;
-    this.height = 560;
+    this.height = 500;
     this.dpr = 1;
 
-    // 12 physical liquid-metal cells indexed by padIdx (0..11)
-    this.cells = Array.from({ length: 12 }, (_, padIdx) => ({
-      padIdx,
-      gridCol: 0,
-      gridRow: 0,
-      restX: 0,
-      restY: 0,
-      baseR: 38,
-      x: 0,
-      y: 0,
-      vx: 0,
-      vy: 0,
-      scale: 1,
-      scaleV: 0,
-      energy: 0,
-      stretch: 0,
-      magPull: 0,
-      lastHitTime: 0,
-      phaseSeed: padIdx * 1.37 + 0.5,
-    }));
+    // Layout metrics (recomputed on resize)
+    this.railWidth = 30;
+    this.padTop = 14;
+    this.padBottom = 14;
+    this.padLeft = 10;
+    this.colW = 110;
+    this.rowH = 100;
+    this.baseR = 36;
+    this.visibleRows = 4.2;
 
-    // Active multi-touch pointers: pointerId -> session state
+    // Infinite vertical pitch scroll coordinate (in 3-note rows; 4 rows = 1 octave)
+    // Default row 4.0 puts C1..B1 (rows 4..7) cleanly in view!
+    this.scrollRow = 4.0;
+    this.scrollVel = 0;
+
+    // Active spring-physics cells keyed by infinite integer noteIdx (0 = C0, 12 = C1, 24 = C2...)
+    this.cellMap = new Map();
+
+    // Multi-touch note pointers + right-edge elevator rail pointer
     this.pointers = new Map();
+    this.railPointer = null;
 
-    // Expanding ferrofluid ripples, persistent liquid bridges, droplets/sparks
+    // Visual FX pools
     this.ripples = [];
     this.bridges = [];
     this.sparks = [];
 
-    // Screen micro-shake & flow energy
     this.shakeX = 0;
     this.shakeY = 0;
     this.shakeMag = 0;
-    this.flowEnergy = 0;
     this.hasInteracted = false;
     this.hintAlpha = 1;
     this.lastTime = performance.now();
 
     this.resize();
     this.bindEvents();
+  }
+
+  /**
+   * Maps any integer infinite noteIdx (..., -12, 0=C0, 12=C1, 24=C2, 36=C3, ...) to name & Hz.
+   */
+  getNoteSpec(noteIdx) {
+    const inst = this.getInstrument();
+    const semitone = ((noteIdx % 12) + 12) % 12;
+    const octave = Math.floor(noteIdx / 12);
+    const baseHz = (inst && inst.baseFreqHz) || 41.2;
+    // Anchor instrument's native baseFreqHz at C1 (noteIdx 12)
+    const freq = clamp(baseHz * Math.pow(2, (noteIdx - 12) / 12), 16, 4200);
+    return {
+      noteIdx,
+      noteName: `${NOTE_NAMES[semitone]}${octave}`,
+      semitone,
+      octave,
+      frequencyHz: freq,
+    };
+  }
+
+  /**
+   * Jump smoothly when user taps the OCT -/+ stepper in Studio Mode.
+   */
+  scrollToOctave(octaveShift) {
+    const targetRow = (1 + octaveShift) * 4.0;
+    this.scrollVel = (targetRow - this.scrollRow) * 0.22;
   }
 
   resize() {
@@ -117,30 +136,67 @@ export class LiquidMorphGrid {
     this.canvas.height = Math.round(this.height * this.dpr);
 
     const zen = Boolean(this.isZenMode && this.isZenMode());
-    const padTop = zen ? 66 : 16;
-    const padBottom = zen ? 22 : 16;
-    const padX = zen ? 14 : 12;
+    this.railWidth = 30;
+    this.padTop = zen ? 60 : 12;
+    this.padBottom = 14;
+    this.padLeft = 10;
 
-    const usableW = Math.max(120, this.width - padX * 2);
-    const usableH = Math.max(160, this.height - padTop - padBottom);
-    const colW = usableW / 3;
-    const rowH = usableH / 4;
-    const baseR = Math.min(colW, rowH) * 0.365;
+    const usableW = Math.max(120, this.width - this.padLeft - this.railWidth - 8);
+    const usableH = Math.max(160, this.height - this.padTop - this.padBottom);
+    this.colW = usableW / 3;
+    this.visibleRows = usableH > 460 ? 4.4 : 4.0;
+    this.rowH = usableH / this.visibleRows;
+    this.baseR = Math.min(this.colW, this.rowH) * 0.36;
+  }
 
-    VERTICAL_PAD_ORDER.forEach((padIdx, slot) => {
-      const col = slot % 3;
-      const row = Math.floor(slot / 3);
-      const cell = this.cells[padIdx];
-      cell.gridCol = col;
-      cell.gridRow = row;
-      cell.restX = padX + colW * (col + 0.5);
-      cell.restY = padTop + rowH * (row + 0.5);
-      cell.baseR = baseR;
-      if (cell.x === 0 && cell.y === 0) {
-        cell.x = cell.restX;
-        cell.y = cell.restY;
-      }
-    });
+  getCellRestPos(noteIdx) {
+    const col = ((noteIdx % 3) + 3) % 3;
+    const row = Math.floor(noteIdx / 3);
+    const usableH = Math.max(160, this.height - this.padTop - this.padBottom);
+    const restX = this.padLeft + this.colW * (col + 0.5);
+    const restY = this.padTop + usableH - (row - this.scrollRow + 0.5) * this.rowH;
+    return { col, row, restX, restY };
+  }
+
+  getOrCreateCell(noteIdx) {
+    let cell = this.cellMap.get(noteIdx);
+    const { col, row, restX, restY } = this.getCellRestPos(noteIdx);
+    if (!cell) {
+      cell = {
+        noteIdx,
+        col,
+        row,
+        restX,
+        restY,
+        x: restX,
+        y: restY,
+        vx: 0,
+        vy: 0,
+        scale: 1,
+        scaleV: 0,
+        energy: 0,
+        stretch: 0,
+        magPull: 0,
+        phaseSeed: noteIdx * 1.37 + 0.5,
+      };
+      this.cellMap.set(noteIdx, cell);
+    } else {
+      cell.restX = restX;
+      cell.restY = restY;
+    }
+    return cell;
+  }
+
+  findNearestNoteAt(x, y) {
+    const usableH = Math.max(160, this.height - this.padTop - this.padBottom);
+    const floatCol = (x - this.padLeft) / this.colW - 0.5;
+    const col = clamp(Math.round(floatCol), 0, 2);
+    const floatRow = this.scrollRow + (this.padTop + usableH - y) / this.rowH - 0.5;
+    const row = Math.round(floatRow);
+    const noteIdx = row * 3 + col;
+    const cell = this.getOrCreateCell(noteIdx);
+    const dist = Math.hypot(x - cell.restX, y - cell.restY);
+    return { cell, dist, floatRow };
   }
 
   bindEvents() {
@@ -155,6 +211,13 @@ export class LiquidMorphGrid {
     const endFn = (e) => this.handlePointerUp(e);
     this.canvas.addEventListener('pointerup', endFn);
     this.canvas.addEventListener('pointercancel', endFn);
+
+    // Smooth mouse-wheel / trackpad infinite octave scrolling
+    this.canvas.addEventListener('wheel', (e) => {
+      e.preventDefault();
+      this.hasInteracted = true;
+      this.scrollVel += -e.deltaY * 0.0024;
+    }, { passive: false });
   }
 
   getLocalPos(e) {
@@ -165,28 +228,16 @@ export class LiquidMorphGrid {
     };
   }
 
-  findNearestCell(x, y) {
-    let best = this.cells[0];
-    let bestDist = Infinity;
-    for (let i = 0; i < this.cells.length; i++) {
-      const c = this.cells[i];
-      const dx = x - c.restX;
-      const dy = y - c.restY;
-      const d = Math.hypot(dx, dy);
-      if (d < bestDist) {
-        bestDist = d;
-        best = c;
-      }
-    }
-    return { cell: best, dist: bestDist };
-  }
-
   haptic(ms = 10) {
     try {
       if (navigator && typeof navigator.vibrate === 'function') {
         navigator.vibrate(ms);
       }
     } catch (_) {}
+  }
+
+  isOnOctaveRail(x) {
+    return x >= this.width - this.railWidth - 6;
   }
 
   handlePointerDown(e) {
@@ -197,28 +248,40 @@ export class LiquidMorphGrid {
     } catch (_) {}
 
     const { x, y } = this.getLocalPos(e);
-    const { cell } = this.findNearestCell(x, y);
-    const notes = this.getPadNotes();
-    const spec = notes[cell.padIdx];
 
-    // Velocity biased by strike height inside the cell (natural thumb weight)
-    const relY = clamp((y - (cell.restY - cell.baseR)) / (cell.baseR * 2), 0, 1);
-    const velocity = 0.72 + relY * 0.28;
-
-    // 1. Crisp button-like 808 PCM transient hit
-    if (this.onTapNote) {
-      this.onTapNote(cell.padIdx, velocity);
+    // Check if user grabbed the Infinite Octave Elevator Rail on the right edge!
+    if (this.isOnOctaveRail(x)) {
+      this.railPointer = {
+        pointerId: e.pointerId,
+        lastY: y,
+        lastTime: performance.now(),
+      };
+      this.scrollVel = 0;
+      this.haptic(6);
+      if (this.onPlayActivity) this.onPlayActivity(true);
+      return;
     }
 
-    // 2. Spin up continuous liquid morph voice silently behind the hit, ready for pull/glide
-    const cutoffNorm = clamp(x / Math.max(1, this.width), 0, 1);
+    const { cell } = this.findNearestNoteAt(x, y);
+    const spec = this.getNoteSpec(cell.noteIdx);
+
+    const relY = clamp((y - (cell.restY - this.baseR)) / (this.baseR * 2), 0, 1);
+    const velocity = 0.72 + relY * 0.28;
+
+    // 1. Crisp infinite-octave transient bass hit
+    this.engine.triggerNoteFreq(spec.frequencyHz, velocity);
+    if (this.onNoteReadout) {
+      this.onNoteReadout(`${spec.noteName} • ${spec.frequencyHz.toFixed(1)}Hz`);
+    }
+
+    // 2. Spin up continuous liquid morph voice silently behind the hit
+    const cutoffNorm = clamp(x / Math.max(1, this.width - this.railWidth), 0, 1);
     this.engine.startLiquidVoice(e.pointerId, spec.frequencyHz, {
       initialGain: 0.0001,
       cutoffNorm,
       stretchNorm: 0,
     });
 
-    // 3. Physical squash, ripple shockwave, sparks & haptic tap
     this.slamCell(cell, velocity, x, y, true);
     this.haptic(10);
 
@@ -226,14 +289,11 @@ export class LiquidMorphGrid {
       pointerId: e.pointerId,
       x,
       y,
-      prevX: x,
-      prevY: y,
-      anchorPadIdx: cell.padIdx,
-      activePadIdx: cell.padIdx,
+      activeNoteIdx: cell.noteIdx,
       currentFreq: spec.frequencyHz,
       stretchNorm: 0,
       isGliding: false,
-      trail: [{ x, y, t: performance.now() }],
+      trail: [{ x, y }],
       downTime: performance.now(),
     });
 
@@ -241,71 +301,77 @@ export class LiquidMorphGrid {
   }
 
   handlePointerMove(e) {
+    // Handle Infinite Octave Elevator Rail drag/flick
+    if (this.railPointer && this.railPointer.pointerId === e.pointerId) {
+      e.preventDefault();
+      const { y } = this.getLocalPos(e);
+      const dy = y - this.railPointer.lastY;
+      this.railPointer.lastY = y;
+      // Dragging rail upward climbs octaves; dragging downward dives octaves!
+      const deltaRows = (-dy / Math.max(24, this.rowH)) * 1.45;
+      this.scrollRow += deltaRows;
+      this.scrollVel = deltaRows * 0.65;
+      const centerOct = Math.floor(((this.scrollRow + this.visibleRows * 0.5) * 3) / 12);
+      if (this.onNoteReadout) {
+        this.onNoteReadout(`OCTAVE ${centerOct} • INFINITE GRID`);
+      }
+      return;
+    }
+
     const ptr = this.pointers.get(e.pointerId);
     if (!ptr) return;
     e.preventDefault();
 
     const { x, y } = this.getLocalPos(e);
-    const now = performance.now();
     const speed = Math.hypot(x - ptr.x, y - ptr.y);
-    ptr.prevX = ptr.x;
-    ptr.prevY = ptr.y;
     ptr.x = x;
     ptr.y = y;
 
-    ptr.trail.push({ x, y, t: now });
+    ptr.trail.push({ x, y });
     if (ptr.trail.length > 22) ptr.trail.shift();
 
-    const notes = this.getPadNotes();
-    const activeCell = this.cells[ptr.activePadIdx];
-    const { cell: nearestCell, dist: nearestDist } = this.findNearestCell(x, y);
+    this.updatePointerAudioAndPhysics(ptr, speed);
+  }
 
-    // Distance from currently active cell center
-    const dxActive = x - activeCell.restX;
-    const dyActive = y - activeCell.restY;
-    const distActive = Math.hypot(dxActive, dyActive);
+  updatePointerAudioAndPhysics(ptr, speed = 0) {
+    const now = performance.now();
+    const x = ptr.x;
+    const y = ptr.y;
+    const activeCell = this.getOrCreateCell(ptr.activeNoteIdx);
+    const { cell: nearestCell, dist: nearestDist } = this.findNearestNoteAt(x, y);
 
     // Cross into a new cell when thumb enters its magnetic capture zone
-    const captureRadius = nearestCell.baseR * 1.08;
-    if (nearestCell.padIdx !== ptr.activePadIdx && nearestDist < captureRadius) {
-      const prevCell = activeCell;
-      ptr.activePadIdx = nearestCell.padIdx;
+    const captureRadius = this.baseR * 1.1;
+    if (nearestCell.noteIdx !== ptr.activeNoteIdx && nearestDist < captureRadius) {
+      const prevIdx = ptr.activeNoteIdx;
+      ptr.activeNoteIdx = nearestCell.noteIdx;
       ptr.isGliding = true;
 
-      // Spawn glowing ferrofluid bridge fusing previous cell -> new cell
       this.bridges.push({
-        fromIdx: prevCell.padIdx,
-        toIdx: nearestCell.padIdx,
+        fromIdx: prevIdx,
+        toIdx: nearestCell.noteIdx,
         life: 1.0,
-        createdAt: now,
       });
 
-      const nextSpec = notes[nearestCell.padIdx];
+      const nextSpec = this.getNoteSpec(nearestCell.noteIdx);
       ptr.currentFreq = nextSpec.frequencyHz;
 
-      // Magnetic fret pop (subtle crisp transient while continuous synth glides seamlessly!)
-      const glideVel = clamp(0.46 + speed * 0.014, 0.48, 0.86);
-      if (this.onGlideNote) {
-        this.onGlideNote(nearestCell.padIdx, glideVel);
-      }
-
-      this.slamCell(nearestCell, glideVel * 0.9, x, y, false);
+      // Subtle magnetic fret pop while continuous synth glides seamlessly
+      const glideVel = clamp(0.36 + speed * 0.012, 0.36, 0.68);
+      this.engine.triggerNoteFreq(nextSpec.frequencyHz, glideVel);
+      this.slamCell(nearestCell, glideVel, x, y, false);
       this.haptic(6);
-      this.flowEnergy = clamp(this.flowEnergy + 0.18, 0, 1);
     }
 
-    // Recompute stretch relative to active cell
-    const curCell = this.cells[ptr.activePadIdx];
+    const curCell = this.getOrCreateCell(ptr.activeNoteIdx);
     const dx = x - curCell.restX;
     const dy = y - curCell.restY;
     const dist = Math.hypot(dx, dy);
 
-    // Stretch starts smoothly past 22% of cell radius and maxes around 2.6x radius
-    const stretchNorm = clamp((dist - curCell.baseR * 0.22) / (curCell.baseR * 2.35), 0, 1);
+    const stretchNorm = clamp((dist - this.baseR * 0.22) / (this.baseR * 2.35), 0, 1);
     ptr.stretchNorm = stretchNorm;
 
-    // Pull the cell toward the thumb with elastic resistance
-    const pullCap = curCell.baseR * 0.44;
+    const pullCap = this.baseR * 0.44;
     const pullMag = Math.min(pullCap, dist * 0.34);
     const angle = Math.atan2(dy, dx);
     curCell.vx += (curCell.restX + Math.cos(angle) * pullMag - curCell.x) * 0.32;
@@ -313,33 +379,28 @@ export class LiquidMorphGrid {
     curCell.stretch = Math.max(curCell.stretch, stretchNorm);
     curCell.energy = Math.max(curCell.energy, 0.42 + stretchNorm * 0.58);
 
-    // Continuous pitch: interpolate smoothly between active cell & nearest neighbor when dragging between them,
-    // or apply expressive pitch tug when stretching outward!
-    const baseSpec = notes[ptr.activePadIdx];
+    const baseSpec = this.getNoteSpec(ptr.activeNoteIdx);
     let targetFreq = baseSpec.frequencyHz;
 
-    if (nearestCell.padIdx !== ptr.activePadIdx) {
+    if (nearestCell.noteIdx !== ptr.activeNoteIdx) {
       const pairDist = Math.max(1, Math.hypot(nearestCell.restX - curCell.restX, nearestCell.restY - curCell.restY));
-      const blend = clamp(dist / pairDist, 0, 0.82);
-      const neighborSpec = notes[nearestCell.padIdx];
-      // Logarithmic pitch interpolation for musical portamento
+      const blend = clamp(dist / pairDist, 0, 0.85);
+      const neighborSpec = this.getNoteSpec(nearestCell.noteIdx);
       targetFreq = baseSpec.frequencyHz * Math.pow(neighborSpec.frequencyHz / baseSpec.frequencyHz, blend);
     } else if (stretchNorm > 0.08) {
-      // Vertical tug bends pitch up to +/- 1.8 semitones for expressive bass vibrato/bend
-      const verticalBend = clamp(-dy / (curCell.baseR * 2.2), -1, 1);
+      const verticalBend = clamp(-dy / (this.baseR * 2.2), -1, 1);
       targetFreq = baseSpec.frequencyHz * Math.pow(2, (verticalBend * 1.8) / 12);
     }
 
     ptr.currentFreq = targetFreq;
 
-    // Swell continuous synth voice as soon as thumb glides or stretches (or holds > 90ms)
     const heldMs = now - ptr.downTime;
     const morphAmount = ptr.isGliding
       ? Math.max(0.68, 0.56 + stretchNorm * 0.32)
-      : clamp(stretchNorm * 0.95 + (heldMs > 110 ? 0.38 : 0), 0, 0.84);
+      : clamp(stretchNorm * 0.95 + (heldMs > 105 ? 0.38 : 0), 0, 0.84);
 
-    const cutoffNorm = clamp(0.18 + (x / Math.max(1, this.width)) * 0.65 + stretchNorm * 0.3, 0, 1);
-    this.engine.updateLiquidVoice(e.pointerId, targetFreq, {
+    const cutoffNorm = clamp(0.18 + (x / Math.max(1, this.width - this.railWidth)) * 0.65 + stretchNorm * 0.3, 0, 1);
+    this.engine.updateLiquidVoice(ptr.pointerId, targetFreq, {
       level: morphAmount,
       stretchNorm,
       cutoffNorm,
@@ -347,17 +408,22 @@ export class LiquidMorphGrid {
     });
 
     if (this.onNoteReadout) {
-      const modeTag = stretchNorm > 0.45 ? 'WOBBLE' : ptr.isGliding ? 'GLIDE' : 'MORPH';
-      this.onNoteReadout(`${baseSpec.noteName} • ${targetFreq.toFixed(1)}Hz • ${modeTag}`);
+      const tag = stretchNorm > 0.45 ? 'WOBBLE' : ptr.isGliding ? 'GLIDE' : 'MORPH';
+      this.onNoteReadout(`${baseSpec.noteName} • ${targetFreq.toFixed(1)}Hz • ${tag}`);
     }
 
-    // Emit liquid chrome sparks while swiping quickly or stretching hard
     if ((speed > 8 || stretchNorm > 0.55) && Math.random() < 0.55) {
       this.spawnSparks(x, y, 2, 0.55 + stretchNorm * 0.45);
     }
   }
 
   handlePointerUp(e) {
+    if (this.railPointer && this.railPointer.pointerId === e.pointerId) {
+      this.railPointer = null;
+      if (this.pointers.size === 0 && this.onPlayActivity) this.onPlayActivity(false);
+      return;
+    }
+
     const ptr = this.pointers.get(e.pointerId);
     if (!ptr) return;
 
@@ -365,15 +431,14 @@ export class LiquidMorphGrid {
     this.engine.stopLiquidVoice(e.pointerId, snapDrop);
 
     if (snapDrop) {
-      // Exaggerated elastic snap-back recoil on big stretch release!
-      const cell = this.cells[ptr.activePadIdx];
+      const cell = this.getOrCreateCell(ptr.activeNoteIdx);
       cell.scaleV += 0.24;
       this.shakeMag = Math.max(this.shakeMag, 4.5);
       this.spawnSparks(ptr.x, ptr.y, 12, 1.0);
       this.ripples.push({
         x: cell.x,
         y: cell.y,
-        r: cell.baseR * 0.5,
+        r: this.baseR * 0.5,
         maxR: Math.max(this.width, this.height) * 0.65,
         strength: 0.95,
         life: 1.0,
@@ -382,30 +447,26 @@ export class LiquidMorphGrid {
     }
 
     this.pointers.delete(e.pointerId);
-    if (this.pointers.size === 0 && this.onPlayActivity) {
+    if (this.pointers.size === 0 && !this.railPointer && this.onPlayActivity) {
       this.onPlayActivity(false);
     }
   }
 
   /**
-   * External trigger hook (from 16-step sequencer, Demo Riff, or desktop keyboard)
-   * so the Liquid-Metal Morph Grid physically dances with every note!
+   * External trigger hook (from 16-step sequencer, Demo Riff, or desktop keyboard).
    */
   pulseCell(padIndex, velocity = 0.9) {
-    const idx = clamp(padIndex, 0, 11);
-    const cell = this.cells[idx];
-    if (!cell) return;
+    const oct = this.getOctaveShift ? this.getOctaveShift() : 0;
+    const noteIdx = (1 + oct) * 12 + clamp(padIndex, 0, 11);
+    const cell = this.getOrCreateCell(noteIdx);
     this.slamCell(cell, velocity, cell.restX, cell.restY, true);
   }
 
   slamCell(cell, velocity, impactX, impactY, strongWave = true) {
     cell.energy = 1.0;
-    cell.lastHitTime = performance.now();
-    // Juicy squash-and-rebound spring impulse
     cell.scale = 0.80;
     cell.scaleV = 0.22 + velocity * 0.14;
 
-    // Slight directional kick away from strike point
     const kickAngle = Math.atan2(cell.y - impactY, cell.x - impactX);
     const kickDist = Math.hypot(cell.x - impactX, cell.y - impactY);
     if (kickDist > 4) {
@@ -413,25 +474,22 @@ export class LiquidMorphGrid {
       cell.vy += Math.sin(kickAngle) * 3.2 * velocity;
     }
 
-    // Expanding ferrofluid pressure wave pushing neighboring cells
     this.ripples.push({
       x: cell.x,
       y: cell.y,
-      r: cell.baseR * 0.55,
+      r: this.baseR * 0.55,
       maxR: Math.max(this.width, this.height) * (strongWave ? 0.72 : 0.45),
       strength: velocity * (strongWave ? 1.0 : 0.55),
       life: 1.0,
     });
 
-    // Immediate radial bump to adjacent cells for tactile chain-reaction feel
-    for (let i = 0; i < this.cells.length; i++) {
-      const other = this.cells[i];
-      if (other.padIdx === cell.padIdx) continue;
+    for (const other of this.cellMap.values()) {
+      if (other.noteIdx === cell.noteIdx) continue;
       const dx = other.restX - cell.restX;
       const dy = other.restY - cell.restY;
       const d = Math.hypot(dx, dy);
-      if (d > 1 && d < cell.baseR * 4.4) {
-        const falloff = (1 - d / (cell.baseR * 4.4)) * velocity * (strongWave ? 4.8 : 2.2);
+      if (d > 1 && d < this.baseR * 4.4) {
+        const falloff = (1 - d / (this.baseR * 4.4)) * velocity * (strongWave ? 4.8 : 2.2);
         other.vx += (dx / d) * falloff;
         other.vy += (dy / d) * falloff;
         other.scaleV += falloff * 0.012;
@@ -441,7 +499,6 @@ export class LiquidMorphGrid {
     this.spawnSparks(impactX, impactY, strongWave ? 9 : 4, velocity);
     if (strongWave) {
       this.shakeMag = Math.min(6.5, this.shakeMag + velocity * 3.4);
-      this.flowEnergy = clamp(this.flowEnergy + 0.14, 0, 1);
     }
   }
 
@@ -464,9 +521,6 @@ export class LiquidMorphGrid {
     }
   }
 
-  /**
-   * Draws an organic catenoid / metaball liquid bridge connecting circle 1 and circle 2.
-   */
   drawLiquidBridge(ctx, x1, y1, r1, x2, y2, r2, fillStyle, alpha = 1) {
     const dx = x2 - x1;
     const dy = y2 - y1;
@@ -476,61 +530,71 @@ export class LiquidMorphGrid {
     const angle = Math.atan2(dy, dx);
     const perp = angle + Math.PI / 2;
 
-    // Waist pinches thinner as the liquid stretches further
     const stretchFactor = clamp(d / ((r1 + r2) * 3.6), 0, 1);
     const w1 = r1 * (0.78 - stretchFactor * 0.25);
     const w2 = r2 * (0.82 - stretchFactor * 0.22);
     const waistW = Math.max(3, Math.min(w1, w2) * (0.58 - stretchFactor * 0.44));
 
-    const p1aX = x1 + Math.cos(perp) * w1;
-    const p1aY = y1 + Math.sin(perp) * w1;
-    const p1bX = x1 - Math.cos(perp) * w1;
-    const p1bY = y1 - Math.sin(perp) * w1;
-
-    const p2aX = x2 + Math.cos(perp) * w2;
-    const p2aY = y2 + Math.sin(perp) * w2;
-    const p2bX = x2 - Math.cos(perp) * w2;
-    const p2bY = y2 - Math.sin(perp) * w2;
-
     const midX = (x1 + x2) * 0.5;
     const midY = (y1 + y2) * 0.5;
-    const ctrlAX = midX + Math.cos(perp) * waistW;
-    const ctrlAY = midY + Math.sin(perp) * waistW;
-    const ctrlBX = midX - Math.cos(perp) * waistW;
-    const ctrlBY = midY - Math.sin(perp) * waistW;
 
     ctx.save();
     ctx.globalAlpha = clamp(alpha, 0, 1);
     ctx.fillStyle = fillStyle;
     ctx.beginPath();
-    ctx.moveTo(p1aX, p1aY);
-    ctx.quadraticCurveTo(ctrlAX, ctrlAY, p2aX, p2aY);
-    ctx.lineTo(p2bX, p2bY);
-    ctx.quadraticCurveTo(ctrlBX, ctrlBY, p1bX, p1bY);
+    ctx.moveTo(x1 + Math.cos(perp) * w1, y1 + Math.sin(perp) * w1);
+    ctx.quadraticCurveTo(midX + Math.cos(perp) * waistW, midY + Math.sin(perp) * waistW, x2 + Math.cos(perp) * w2, y2 + Math.sin(perp) * w2);
+    ctx.lineTo(x2 - Math.cos(perp) * w2, y2 - Math.sin(perp) * w2);
+    ctx.quadraticCurveTo(midX - Math.cos(perp) * waistW, midY - Math.sin(perp) * waistW, x1 - Math.cos(perp) * w1, y1 - Math.sin(perp) * w1);
     ctx.closePath();
     ctx.fill();
     ctx.restore();
   }
 
-  /**
-   * Main 60-120fps physics update + ferrofluid Canvas render pass.
-   */
   render(now) {
     const dt = Math.min(0.04, Math.max(0.004, (now - this.lastTime) / 1000));
     this.lastTime = now;
     const step = dt * 60;
 
     const inst = this.getInstrument();
-    const notes = this.getPadNotes();
     const accentHex = inst.accentColorHex || '#38BDF8';
     const accentRgb = hexToRgb(accentHex);
     const bassAmp = this.engine.getBassAmplitude ? this.engine.getBassAmplitude() : 0;
 
-    // Decay flow, hint & screen micro-shake
-    this.flowEnergy = Math.max(0, this.flowEnergy - 0.004 * step);
+    // 1. Auto-Climb / Auto-Dive Edge Scroll when gliding near top/bottom of the infinite lattice!
+    let autoScroll = 0;
+    const topZone = this.padTop + this.rowH * 0.62;
+    const botZone = this.height - this.padBottom - this.rowH * 0.58;
+    for (const ptr of this.pointers.values()) {
+      if (ptr.y < topZone) {
+        const strength = clamp((topZone - ptr.y) / (this.rowH * 0.8), 0, 1);
+        autoScroll += strength * 0.085 * step;
+      } else if (ptr.y > botZone) {
+        const strength = clamp((ptr.y - botZone) / (this.rowH * 0.8), 0, 1);
+        autoScroll -= strength * 0.085 * step;
+      }
+    }
+
+    if (autoScroll !== 0) {
+      this.scrollRow += autoScroll;
+      this.scrollVel = 0;
+      for (const ptr of this.pointers.values()) {
+        this.updatePointerAudioAndPhysics(ptr, 4);
+      }
+    } else if (!this.railPointer) {
+      // Silky inertia scroll when flicking rail or wheel
+      this.scrollRow += this.scrollVel * step;
+      this.scrollVel *= Math.pow(0.88, step);
+      if (Math.abs(this.scrollVel) < 0.0008) this.scrollVel = 0;
+    }
+
+    // Keep within ultra-wide musical infinity (-4 octaves infrabass -> +10 octaves)
+    this.scrollRow = clamp(this.scrollRow, -12, 42);
+
     if (this.hasInteracted && this.hintAlpha > 0) {
       this.hintAlpha = Math.max(0, this.hintAlpha - 0.045 * step);
     }
+
     this.shakeMag *= Math.pow(0.82, step);
     if (this.shakeMag > 0.08) {
       this.shakeX = (Math.random() - 0.5) * 2 * this.shakeMag;
@@ -541,23 +605,43 @@ export class LiquidMorphGrid {
       this.shakeMag = 0;
     }
 
-    // Update cell spring physics + magnetic proximity pull from all active pointers
-    for (let i = 0; i < this.cells.length; i++) {
-      const c = this.cells[i];
+    // Determine currently visible row window (plus 1-row buffer above/below)
+    const minRow = Math.floor(this.scrollRow) - 1;
+    const maxRow = Math.ceil(this.scrollRow + this.visibleRows) + 1;
+    const visibleCells = [];
+
+    for (let r = minRow; r <= maxRow; r++) {
+      for (let c = 0; c < 3; c++) {
+        const noteIdx = r * 3 + c;
+        const cell = this.getOrCreateCell(noteIdx);
+        visibleCells.push(cell);
+      }
+    }
+
+    // Prune far off-screen dormant cells to keep memory & CPU tiny
+    for (const [nIdx, cell] of this.cellMap.entries()) {
+      const r = Math.floor(nIdx / 3);
+      if ((r < minRow - 3 || r > maxRow + 3) && cell.energy < 0.02) {
+        this.cellMap.delete(nIdx);
+      }
+    }
+
+    // Integrate spring physics on visible cells
+    for (let i = 0; i < visibleCells.length; i++) {
+      const c = visibleCells[i];
       let targetX = c.restX;
       let targetY = c.restY;
       let targetScale = 1 + bassAmp * 0.045;
       let magPull = 0;
 
-      // Magnetic attraction toward nearby moving thumbs!
       for (const ptr of this.pointers.values()) {
         const dx = ptr.x - c.restX;
         const dy = ptr.y - c.restY;
         const d = Math.hypot(dx, dy);
-        const magRange = c.baseR * 3.1;
+        const magRange = this.baseR * 3.1;
         if (d < magRange) {
           const proximity = 1 - d / magRange;
-          const pullStrength = ptr.activePadIdx === c.padIdx ? 0.28 : 0.16 * proximity;
+          const pullStrength = ptr.activeNoteIdx === c.noteIdx ? 0.28 : 0.16 * proximity;
           targetX += dx * pullStrength;
           targetY += dy * pullStrength;
           targetScale += proximity * 0.14;
@@ -565,11 +649,9 @@ export class LiquidMorphGrid {
         }
       }
 
-      // Hooke's law spring integration
-      const springK = 0.20;
       const damp = Math.pow(0.76, step);
-      c.vx = (c.vx + (targetX - c.x) * springK * step) * damp;
-      c.vy = (c.vy + (targetY - c.y) * springK * step) * damp;
+      c.vx = (c.vx + (targetX - c.x) * 0.22 * step) * damp;
+      c.vy = (c.vy + (targetY - c.y) * 0.22 * step) * damp;
       c.x += c.vx * step;
       c.y += c.vy * step;
 
@@ -581,23 +663,17 @@ export class LiquidMorphGrid {
       c.magPull = magPull;
     }
 
-    // Update ripples
+    // Update ripples, bridges, sparks
     for (let i = this.ripples.length - 1; i >= 0; i--) {
       const rp = this.ripples[i];
       rp.r += (rp.maxR * 0.042 + 4.2) * step;
       rp.life -= 0.032 * step;
-      if (rp.life <= 0 || rp.r > rp.maxR) {
-        this.ripples.splice(i, 1);
-      }
+      if (rp.life <= 0 || rp.r > rp.maxR) this.ripples.splice(i, 1);
     }
-
-    // Update bridges
     for (let i = this.bridges.length - 1; i >= 0; i--) {
       this.bridges[i].life -= 0.035 * step;
       if (this.bridges[i].life <= 0) this.bridges.splice(i, 1);
     }
-
-    // Update sparks
     for (let i = this.sparks.length - 1; i >= 0; i--) {
       const sp = this.sparks[i];
       sp.x += sp.vx * step;
@@ -612,30 +688,59 @@ export class LiquidMorphGrid {
     const ctx = this.ctx;
     const w = this.width;
     const h = this.height;
+    const fieldW = w - this.railWidth - 4;
 
     ctx.save();
     ctx.scale(this.dpr, this.dpr);
 
     // 1. Deep Obsidian Ferrofluid Bed
-    const bgGrad = ctx.createRadialGradient(w * 0.5, h * 0.45, 20, w * 0.5, h * 0.5, Math.max(w, h) * 0.85);
+    const bgGrad = ctx.createRadialGradient(fieldW * 0.5, h * 0.45, 20, fieldW * 0.5, h * 0.5, Math.max(w, h) * 0.85);
     bgGrad.addColorStop(0, `rgb(${13 + Math.round(accentRgb.r * 0.05 * bassAmp)}, ${15 + Math.round(accentRgb.g * 0.05 * bassAmp)}, ${20 + Math.round(accentRgb.b * 0.05 * bassAmp)})`);
     bgGrad.addColorStop(1, '#07080B');
     ctx.fillStyle = bgGrad;
     ctx.fillRect(0, 0, w, h);
 
-    // Apply micro screen-shake to active world
+    // Clip playable infinite lattice away from the right-side Octave Elevator Rail
+    ctx.save();
+    ctx.beginPath();
+    ctx.rect(0, 0, fieldW, h);
+    ctx.clip();
     ctx.translate(this.shakeX, this.shakeY);
 
-    // 2. Live Sub-Bass Waveform Ribbon Woven Behind the Ferrofluid Cells
-    const samples = this.engine.readOscilloscope ? this.engine.readOscilloscope() : null;
+    // 2. Octave Horizon Dividers (every 4 rows = new octave C0, C1, C2, C3...)
+    const usableH = Math.max(160, h - this.padTop - this.padBottom);
+    const firstOctRow = Math.floor(minRow / 4) * 4;
+    for (let octRow = firstOctRow; octRow <= maxRow + 4; octRow += 4) {
+      const yLine = this.padTop + usableH - (octRow - this.scrollRow) * this.rowH;
+      if (yLine < -20 || yLine > h + 20) continue;
+      const octNum = Math.round(octRow / 4);
+      ctx.save();
+      ctx.strokeStyle = rgba(accentRgb, 0.22);
+      ctx.lineWidth = 1;
+      ctx.setLineDash([4, 6]);
+      ctx.beginPath();
+      ctx.moveTo(10, yLine);
+      ctx.lineTo(fieldW - 8, yLine);
+      ctx.stroke();
+      ctx.setLineDash([]);
+
+      ctx.font = '700 9px "JetBrains Mono", ui-monospace, monospace';
+      ctx.fillStyle = rgba(accentRgb, 0.72);
+      ctx.textAlign = 'left';
+      ctx.fillText(`OCT ${octNum}`, 12, yLine - 4);
+      ctx.restore();
+    }
+
+    // 3. Live Sub-Bass Waveform Ribbon Behind Cells
+    const samples = this.engine.scopeData;
     if (samples) {
-      const midY = h * 0.52;
+      const midY = h * 0.5;
       ctx.save();
       ctx.strokeStyle = rgba(accentRgb, 0.11 + bassAmp * 0.24);
       ctx.lineWidth = 1.6 + bassAmp * 1.8;
       ctx.beginPath();
       for (let i = 0; i < samples.length; i += 2) {
-        const sx = (i / (samples.length - 1)) * w;
+        const sx = (i / (samples.length - 1)) * fieldW;
         const sy = midY - samples[i] * (h * 0.16);
         if (i === 0) ctx.moveTo(sx, sy);
         else ctx.lineTo(sx, sy);
@@ -644,7 +749,7 @@ export class LiquidMorphGrid {
       ctx.restore();
     }
 
-    // 3. Expanding Ferrofluid Shockwave Ripples
+    // 4. Ferrofluid Shockwaves
     for (let i = 0; i < this.ripples.length; i++) {
       const rp = this.ripples[i];
       ctx.save();
@@ -656,24 +761,23 @@ export class LiquidMorphGrid {
       ctx.restore();
     }
 
-    // 4. Persistent Fusing Bridges Between Recently Glided Cells
+    // 5. Persistent Glided Liquid Bridges
     for (let i = 0; i < this.bridges.length; i++) {
       const br = this.bridges[i];
-      const a = this.cells[br.fromIdx];
-      const b = this.cells[br.toIdx];
+      const a = this.getOrCreateCell(br.fromIdx);
+      const b = this.getOrCreateCell(br.toIdx);
       const grad = ctx.createLinearGradient(a.x, a.y, b.x, b.y);
       grad.addColorStop(0, rgba(accentRgb, 0.72));
       grad.addColorStop(0.5, 'rgba(235, 244, 255, 0.85)');
       grad.addColorStop(1, rgba(accentRgb, 0.72));
-      this.drawLiquidBridge(ctx, a.x, a.y, a.baseR * 0.65, b.x, b.y, b.baseR * 0.65, grad, br.life * 0.78);
+      this.drawLiquidBridge(ctx, a.x, a.y, this.baseR * 0.65, b.x, b.y, this.baseR * 0.65, grad, br.life * 0.78);
     }
 
-    // 5. Live Elastic Taffy Bridges Connecting Anchored Cells -> Active Thumbs
+    // 6. Active Taffy Bridges + Swipe Trails
     for (const ptr of this.pointers.values()) {
-      const cell = this.cells[ptr.activePadIdx];
-      const thumbR = cell.baseR * (0.34 + ptr.stretchNorm * 0.14);
+      const cell = this.getOrCreateCell(ptr.activeNoteIdx);
+      const thumbR = this.baseR * (0.34 + ptr.stretchNorm * 0.14);
 
-      // Luminous swipe ribbon trail
       if (ptr.trail.length > 2) {
         ctx.save();
         ctx.lineCap = 'round';
@@ -692,34 +796,25 @@ export class LiquidMorphGrid {
         ctx.restore();
       }
 
-      // Catenoid metaball neck between active cell and thumb orb
       const bGrad = ctx.createLinearGradient(cell.x, cell.y, ptr.x, ptr.y);
       bGrad.addColorStop(0, rgba(accentRgb, 0.85));
       bGrad.addColorStop(0.55, ptr.stretchNorm > 0.5 ? 'rgba(255, 232, 195, 0.92)' : rgba(accentRgb, 0.68));
       bGrad.addColorStop(1, '#ffffff');
-      this.drawLiquidBridge(
-        ctx,
-        cell.x,
-        cell.y,
-        cell.baseR * cell.scale * 0.88,
-        ptr.x,
-        ptr.y,
-        thumbR,
-        bGrad,
-        0.86
-      );
+      this.drawLiquidBridge(ctx, cell.x, cell.y, this.baseR * cell.scale * 0.88, ptr.x, ptr.y, thumbR, bGrad, 0.86);
     }
 
-    // 6. Render All 12 Sculpted Ferrofluid Liquid-Metal Cells
-    for (let i = 0; i < this.cells.length; i++) {
-      const c = this.cells[i];
-      const spec = notes[c.padIdx];
-      const r = c.baseR * c.scale;
+    // 7. Render Visible Infinite Ferrofluid Cells
+    for (let i = 0; i < visibleCells.length; i++) {
+      const c = visibleCells[i];
+      if (c.y < -this.baseR * 1.6 || c.y > h + this.baseR * 1.6) continue;
+
+      const spec = this.getNoteSpec(c.noteIdx);
+      const r = this.baseR * c.scale;
+      const isRootC = spec.semitone === 0;
       const activeGlow = clamp(c.energy + c.magPull * 0.45 + c.stretch * 0.6, 0, 1);
 
-      // Ambient Sub-Bass Glow Halo behind cell
       if (activeGlow > 0.04 || bassAmp > 0.12) {
-        const haloR = r * (1.42 + activeGlow * 0.45);
+        const haloR = r * (1.4 + activeGlow * 0.45);
         const halo = ctx.createRadialGradient(c.x, c.y, r * 0.35, c.x, c.y, haloR);
         halo.addColorStop(0, rgba(accentRgb, 0.28 * activeGlow + bassAmp * 0.08));
         halo.addColorStop(1, rgba(accentRgb, 0));
@@ -729,18 +824,17 @@ export class LiquidMorphGrid {
         ctx.fill();
       }
 
-      // Organic liquid-metal perimeter (subtle ferrofluid surface ripples when energized)
       ctx.save();
       ctx.beginPath();
-      const wobbleAmp = (c.energy * 2.4 + c.stretch * 3.8 + bassAmp * 1.4);
-      const segments = 32;
+      const wobbleAmp = c.energy * 2.4 + c.stretch * 3.8 + bassAmp * 1.4;
+      const segments = 28;
       for (let s = 0; s <= segments; s++) {
         const a = (s / segments) * Math.PI * 2;
-        const microWave = wobbleAmp > 0.15
+        const mw = wobbleAmp > 0.15
           ? Math.sin(a * 4 + now * 0.011 + c.phaseSeed) * wobbleAmp * 0.6 +
             Math.cos(a * 3 - now * 0.008) * wobbleAmp * 0.4
           : 0;
-        const rad = r + microWave;
+        const rad = r + mw;
         const px = c.x + Math.cos(a) * rad;
         const py = c.y + Math.sin(a) * rad;
         if (s === 0) ctx.moveTo(px, py);
@@ -748,64 +842,53 @@ export class LiquidMorphGrid {
       }
       ctx.closePath();
 
-      // Sculpted obsidian-mercury gradient fill
-      const bodyGrad = ctx.createRadialGradient(
-        c.x - r * 0.28,
-        c.y - r * 0.32,
-        r * 0.08,
-        c.x,
-        c.y,
-        r * 1.08
-      );
+      const bodyGrad = ctx.createRadialGradient(c.x - r * 0.28, c.y - r * 0.32, r * 0.08, c.x, c.y, r * 1.08);
       if (activeGlow > 0.15) {
         bodyGrad.addColorStop(0, `rgba(${Math.min(255, 72 + Math.round(accentRgb.r * 0.65 * activeGlow))}, ${Math.min(255, 78 + Math.round(accentRgb.g * 0.65 * activeGlow))}, ${Math.min(255, 88 + Math.round(accentRgb.b * 0.65 * activeGlow))}, 0.98)`);
         bodyGrad.addColorStop(0.58, `rgba(${24 + Math.round(accentRgb.r * 0.22 * activeGlow)}, ${27 + Math.round(accentRgb.g * 0.22 * activeGlow)}, ${34 + Math.round(accentRgb.b * 0.22 * activeGlow)}, 0.96)`);
         bodyGrad.addColorStop(1, '#0E1016');
       } else {
-        bodyGrad.addColorStop(0, '#2B303B');
+        bodyGrad.addColorStop(0, isRootC ? '#333A48' : '#292E38');
         bodyGrad.addColorStop(0.55, '#171A21');
         bodyGrad.addColorStop(1, '#0C0E13');
       }
       ctx.fillStyle = bodyGrad;
       ctx.fill();
 
-      // Machined liquid rim highlight
-      ctx.lineWidth = activeGlow > 0.2 ? 1.8 : 1.1;
+      ctx.lineWidth = activeGlow > 0.2 ? 1.8 : isRootC ? 1.35 : 1.05;
       ctx.strokeStyle = activeGlow > 0.2
         ? rgba(accentRgb, 0.45 + activeGlow * 0.55)
-        : 'rgba(255, 255, 255, 0.13)';
+        : isRootC
+          ? rgba(accentRgb, 0.34)
+          : 'rgba(255, 255, 255, 0.12)';
       ctx.stroke();
 
-      // Top-left liquid chrome specular crescent
       ctx.beginPath();
       ctx.arc(c.x, c.y, r * 0.82, Math.PI * 1.08, Math.PI * 1.62);
       ctx.strokeStyle = `rgba(255, 255, 255, ${0.14 + activeGlow * 0.32})`;
-      ctx.lineWidth = 2.0;
+      ctx.lineWidth = 1.9;
       ctx.lineCap = 'round';
       ctx.stroke();
       ctx.restore();
 
-      // Crisp Note Typography centered in each ferrofluid cell
       ctx.save();
       ctx.textAlign = 'center';
       ctx.textBaseline = 'middle';
-      ctx.fillStyle = activeGlow > 0.35 ? '#FFFFFF' : 'rgba(241, 238, 232, 0.9)';
-      ctx.font = `700 ${Math.round(clamp(r * 0.44, 15, 24))}px "Space Grotesk", ui-sans-serif, system-ui, sans-serif`;
+      ctx.fillStyle = activeGlow > 0.35 ? '#FFFFFF' : 'rgba(241, 238, 232, 0.92)';
+      ctx.font = `700 ${Math.round(clamp(r * 0.44, 14, 22))}px "Space Grotesk", ui-sans-serif, system-ui, sans-serif`;
       ctx.fillText(spec.noteName, c.x, c.y - r * 0.1);
 
-      ctx.fillStyle = activeGlow > 0.35 ? rgba(accentRgb, 0.95) : 'rgba(155, 162, 175, 0.68)';
-      ctx.font = `600 ${Math.round(clamp(r * 0.22, 9, 11.5))}px "JetBrains Mono", ui-monospace, monospace`;
-      ctx.fillText(`${Math.round(spec.frequencyHz)}Hz`, c.x, c.y + r * 0.34);
+      ctx.fillStyle = activeGlow > 0.35 ? rgba(accentRgb, 0.95) : 'rgba(155, 162, 175, 0.66)';
+      ctx.font = `600 ${Math.round(clamp(r * 0.22, 8.5, 11))}px "JetBrains Mono", ui-monospace, monospace`;
+      const hzText = spec.frequencyHz >= 1000 ? `${(spec.frequencyHz / 1000).toFixed(1)}k` : `${Math.round(spec.frequencyHz)}Hz`;
+      ctx.fillText(hzText, c.x, c.y + r * 0.34);
       ctx.restore();
     }
 
-    // 7. Render Active Thumb Mercury Orbs + Tension/Wobble Arc Gauges
+    // 8. Active Thumb Mercury Orbs & Tension Arcs
     for (const ptr of this.pointers.values()) {
-      const cell = this.cells[ptr.activePadIdx];
-      const orbR = cell.baseR * (0.30 + ptr.stretchNorm * 0.14);
-
+      const orbR = this.baseR * (0.30 + ptr.stretchNorm * 0.14);
       ctx.save();
-      // Glowing tension arc around thumb when pulling/bending
       if (ptr.stretchNorm > 0.06) {
         const gaugeR = orbR + 10;
         ctx.strokeStyle = 'rgba(255,255,255,0.14)';
@@ -818,25 +901,10 @@ export class LiquidMorphGrid {
         ctx.lineWidth = 3.5;
         ctx.lineCap = 'round';
         ctx.beginPath();
-        ctx.arc(
-          ptr.x,
-          ptr.y,
-          gaugeR,
-          -Math.PI / 2,
-          -Math.PI / 2 + ptr.stretchNorm * Math.PI * 2
-        );
+        ctx.arc(ptr.x, ptr.y, gaugeR, -Math.PI / 2, -Math.PI / 2 + ptr.stretchNorm * Math.PI * 2);
         ctx.stroke();
       }
-
-      // Chrome thumb orb
-      const orbGrad = ctx.createRadialGradient(
-        ptr.x - orbR * 0.3,
-        ptr.y - orbR * 0.3,
-        2,
-        ptr.x,
-        ptr.y,
-        orbR
-      );
+      const orbGrad = ctx.createRadialGradient(ptr.x - orbR * 0.3, ptr.y - orbR * 0.3, 2, ptr.x, ptr.y, orbR);
       orbGrad.addColorStop(0, '#FFFFFF');
       orbGrad.addColorStop(0.55, accentHex);
       orbGrad.addColorStop(1, rgba(accentRgb, 0.65));
@@ -847,7 +915,7 @@ export class LiquidMorphGrid {
       ctx.restore();
     }
 
-    // 8. Metallic Impact Droplets / Sparks
+    // 9. Metallic Impact Sparks
     for (let i = 0; i < this.sparks.length; i++) {
       const sp = this.sparks[i];
       ctx.save();
@@ -858,18 +926,84 @@ export class LiquidMorphGrid {
       ctx.restore();
     }
 
-    // 9. First-Touch Subtle Whisper Hint (dissolves permanently after first touch)
+    // First-touch subtle hint
     if (this.hintAlpha > 0.01) {
       ctx.save();
       ctx.globalAlpha = this.hintAlpha * 0.72;
       ctx.textAlign = 'center';
       ctx.textBaseline = 'middle';
-      ctx.font = '600 10px "JetBrains Mono", ui-monospace, monospace';
-      ctx.fillStyle = 'rgba(235, 232, 224, 0.85)';
-      ctx.fillText('TAP PADS  •  SWIPE TO GLIDE  •  PULL TO WOBBLE', w * 0.5, h - 14);
+      ctx.font = '600 9.5px "JetBrains Mono", ui-monospace, monospace';
+      ctx.fillStyle = 'rgba(235, 232, 224, 0.86)';
+      ctx.fillText('TAP • SWIPE EDGE FOR INFINITE OCTAVES • PULL TO WOBBLE', fieldW * 0.5, h - 10);
       ctx.restore();
     }
 
+    ctx.restore(); // end field clip
+
+    // 10. Right-Edge Infinite Octave Elevator Rail (always sharp & un-shaken!)
+    this.drawOctaveRail(ctx, w, h, accentRgb, accentHex);
+
+    ctx.restore();
+  }
+
+  drawOctaveRail(ctx, w, h, accentRgb, accentHex) {
+    const rx = w - this.railWidth;
+    const topY = this.padTop;
+    const botY = h - this.padBottom;
+    const railH = Math.max(80, botY - topY);
+
+    ctx.save();
+    // Recessed elevator track
+    ctx.fillStyle = this.railPointer ? 'rgba(255,255,255,0.08)' : 'rgba(255,255,255,0.035)';
+    ctx.beginPath();
+    ctx.roundRect(rx + 2, topY, this.railWidth - 6, railH, 11);
+    ctx.fill();
+    ctx.strokeStyle = this.railPointer ? rgba(accentRgb, 0.65) : 'rgba(255,255,255,0.08)';
+    ctx.lineWidth = 1;
+    ctx.stroke();
+
+    // Infinite scrolling octave ruler ticks inside the rail
+    ctx.beginPath();
+    ctx.roundRect(rx + 2, topY, this.railWidth - 6, railH, 11);
+    ctx.clip();
+
+    const centerOctFloat = (this.scrollRow + this.visibleRows * 0.5) / 4;
+    const baseOct = Math.floor(centerOctFloat);
+    const pxPerOct = railH / 4.2;
+
+    for (let o = baseOct - 4; o <= baseOct + 4; o++) {
+      const ty = topY + railH * 0.5 - (o - centerOctFloat) * pxPerOct;
+      if (ty < topY - 12 || ty > botY + 12) continue;
+      const distNorm = clamp(Math.abs(ty - (topY + railH * 0.5)) / (railH * 0.5), 0, 1);
+      const isCenter = Math.abs(o - centerOctFloat) < 0.55;
+
+      ctx.strokeStyle = isCenter ? accentHex : `rgba(255,255,255,${0.32 * (1 - distNorm)})`;
+      ctx.lineWidth = isCenter ? 2 : 1;
+      ctx.beginPath();
+      ctx.moveTo(rx + 5, ty);
+      ctx.lineTo(rx + (isCenter ? 11 : 9), ty);
+      ctx.stroke();
+
+      ctx.font = `${isCenter ? '700' : '600'} 8.5px "JetBrains Mono", ui-monospace, monospace`;
+      ctx.fillStyle = isCenter ? '#FFFFFF' : `rgba(180,186,198,${0.7 * (1 - distNorm)})`;
+      ctx.textAlign = 'center';
+      ctx.textBaseline = 'middle';
+      ctx.fillText(`C${o}`, rx + this.railWidth * 0.5 + 1, ty);
+    }
+
+    // Center glowing reticle marker
+    const midY = topY + railH * 0.5;
+    ctx.fillStyle = accentHex;
+    ctx.beginPath();
+    ctx.arc(rx + 5, midY, 2.5, 0, Math.PI * 2);
+    ctx.fill();
+
+    // Top/Bottom infinity arrows
+    ctx.font = '700 8px "JetBrains Mono", ui-monospace, monospace';
+    ctx.fillStyle = 'rgba(255,255,255,0.4)';
+    ctx.textAlign = 'center';
+    ctx.fillText('▲', rx + this.railWidth * 0.5 - 1, topY + 9);
+    ctx.fillText('▼', rx + this.railWidth * 0.5 - 1, botY - 8);
     ctx.restore();
   }
 }
